@@ -55,8 +55,8 @@ float linear01(float depthValue, float n, float f)
 
 bool rayIntersectsDepthBuffer(float zA, float zB, vec2 uv, float nearPlane, float farPlane, float pixelZSize)
 {
-	float depthFrontFace = linear01(texture2D(depthTexture, uv).x, nearPlane, farPlane) * farPlane;
-	float depthBackFace = texture2D(backfaceDepthTexture, uv).x * farPlane; // why not linearize?
+	float depthFrontFace = linear01(texture2D(depthTexture, uv).x, nearPlane, farPlane) * -farPlane;
+	float depthBackFace = texture2D(backfaceDepthTexture, uv).x * -farPlane; // why not linearize?
 
 	return zB <= depthFrontFace && zA >= depthBackFace - pixelZSize;
 }
@@ -153,7 +153,9 @@ bool traceScreenSpaceRay(vec3 rayOrigin, vec3 rayDirection, float maxRayDistance
 			swap(zB, zA);
 		}
 
-		hitPixel = permute ? pqk.yx : pqk.xy;
+		// zA > zB
+
+		hitPixel = permute ? pqk.yx : pqk.xy; // hitPixel = P
 		hitPixel *= invScreenDim;
 
 		intersect = rayIntersectsDepthBuffer(zA, zB, hitPixel, nearPlane, farPlane, pixelZSize);
@@ -177,45 +179,44 @@ void main()
 	vec3 normal = normalize(texture2D(normalTexture, texCoords).xyz);
 	float shininess = texture2D(colorTexture, texCoords).a;
 	
-	float depth = linear01(texture2D(depthTexture, texCoords).x, clippingPlanes.x, clippingPlanes.y);
-	fragColor = vec4(depth);
-
-	//vec3 v = normalize(position);
-	//vec3 rayDirection = reflect(v, normal);
-	//vec3 rayOrigin = position;
-
-	//float maxRayTraceDistance = 100.0;
-	//float stride = 1.0;
-	//float strideZCutoff = 100.0;
-	//float jitter = 1.0;
-	//float pixelZSize = 0.1;
-	//float iterations = 60.0;
-
-	
-
-	//vec2 hitPixel;
-	//vec3 hitPoint;
-	//float iterationsNeeded;
-
-	//bool result = traceScreenSpaceRay(rayOrigin, rayDirection, maxRayTraceDistance, 
-	//					 stride, strideZCutoff, jitter, pixelZSize,
-	//					 iterations,
-	//					 hitPixel, hitPoint, iterationsNeeded);
-
-	//if (result)
-	//{
-	//	vec2 tex = vec2(hitPixel.x / screenDim.x, (hitPixel.y / screenDim.y));
-	//	//fragColor = texture2D(colorTexture, tex);
-	//	fragColor = texture2D(colorTexture, hitPixel);
-		
-	//}
-	//else
-	//{
-	//	fragColor = texture2D(colorTexture, texCoords);
-	//	//fragColor = vec4(0.2);
-	//}
-	
 	gl_FragDepth = texture2D(depthTexture, texCoords).x;
+	fragColor = vec4(color, 1.0);
+
+#if 1
+	float depth = linear01(texture2D(depthTexture, texCoords).x, clippingPlanes.x, clippingPlanes.y);
+	
+
+
+	vec3 viewDir = normalize(position);
+	vec3 rayDirection = normalize(reflect(viewDir, normal));
+	vec3 rayOrigin = position + rayDirection * 1;
+
+	float maxRayTraceDistance = 100.0;
+	float stride = 10;
+	float strideZCutoff = 1000.0;
+	float jitter = 0.1;
+	float pixelZSize = 1;
+	float iterations = 60.0;
+
+	
+
+	vec2 hitPixel;
+	vec3 hitPoint;
+	float iterationsNeeded;
+
+	bool result = traceScreenSpaceRay(rayOrigin, rayDirection, maxRayTraceDistance, 
+						 stride, strideZCutoff, jitter, pixelZSize,
+						 iterations,
+						 hitPixel, hitPoint, iterationsNeeded);
+
+	if (result)
+	{
+		vec2 tex = vec2(hitPixel.x / screenDim.x, hitPixel.y / screenDim.y);
+		fragColor = mix(vec4(color, 1.0), texture2D(colorTexture, hitPixel), 0.8);
+	
+	}
+
+#endif
 }
 
 

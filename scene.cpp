@@ -504,18 +504,23 @@ static void attachColorAttachment(opengl_fbo& fbo, GLint internalformat, GLint f
 
 static void attachDepthAttachment(opengl_fbo& fbo)
 {
-	glBindTexture(GL_TEXTURE_2D, fbo.depthTexture);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32F, fbo.width, fbo.height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+	if (!fbo.usesDepth)
+	{
+		glGenTextures(1, &fbo.depthTexture);
 
-	glBindTexture(GL_TEXTURE_2D, 0);
+		glBindTexture(GL_TEXTURE_2D, fbo.depthTexture);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32F, fbo.width, fbo.height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
 
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, fbo.depthTexture, 0);
+		glBindTexture(GL_TEXTURE_2D, 0);
 
-	fbo.usesDepth = true;
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, fbo.depthTexture, 0);
+
+		fbo.usesDepth = true;
+	}
 }
 
 static bool finishFBO(opengl_fbo& fbo)
@@ -570,19 +575,19 @@ static inline void bindDefaultFramebuffer(uint32 width, uint32 height)
 static bool initializeFBOs(opengl_fbo& frontFaceBuffer, opengl_fbo& backFaceBuffer, uint32 width, uint32 height)
 {
 	createFBO(frontFaceBuffer, width, height);
-	attachColorAttachment(frontFaceBuffer, GL_RGB32F, GL_FLOAT);
-	attachColorAttachment(frontFaceBuffer, GL_RGB16F, GL_FLOAT);
-	attachColorAttachment(frontFaceBuffer, GL_RGBA8, GL_UNSIGNED_BYTE);
+	attachColorAttachment(frontFaceBuffer, GL_RGB32F, GL_FLOAT);		// positions
+	attachColorAttachment(frontFaceBuffer, GL_RGB16F, GL_FLOAT);		// normals
+	attachColorAttachment(frontFaceBuffer, GL_RGBA8, GL_UNSIGNED_BYTE); // color
 	attachDepthAttachment(frontFaceBuffer);
 	bool frontFaceBufferSucess = finishFBO(frontFaceBuffer);
 
-	/*createFBO(backFaceBuffer, width / 4, height / 4);
+	createFBO(backFaceBuffer, width / 4, height / 4);
 	attachDepthAttachment(backFaceBuffer);
-	bool backFaceBufferSuccess = finishFBO(backFaceBuffer);*/
+	bool backFaceBufferSuccess = finishFBO(backFaceBuffer);
 
 	bindDefaultFramebuffer(width, height);
 
-	return frontFaceBufferSucess/* && backFaceBufferSuccess*/;
+	return frontFaceBufferSucess && backFaceBufferSuccess;
 }
 
 static bool loadAllShaders(scene_state& scene)
@@ -650,6 +655,7 @@ static bool loadAllShaders(scene_state& scene)
 			glUniform1i(glGetUniformLocation(shader.programID, "normalTexture"), 1);
 			glUniform1i(glGetUniformLocation(shader.programID, "colorTexture"), 2);
 			glUniform1i(glGetUniformLocation(shader.programID, "depthTexture"), 3);
+			glUniform1i(glGetUniformLocation(shader.programID, "backfaceDepthTexture"), 4);
 
 			reloaded = true;
 		}
@@ -733,14 +739,14 @@ void updateScene(scene_state& scene, raw_input& input, float dt)
 	if (buttonDownEvent(input, KB_ESC))
 		exit(0);
 
-	const float movementSpeed = 1.f;
+	const float movementSpeed = 10.f;
 	const float rotationSpeed = 2.f;
 
-	vec3 positionChange = isDown(input, KB_W) ? vec3(0.f, 0.f, -1.f) : vec3();
-	positionChange	   += isDown(input, KB_S) ? vec3(0.f, 0.f, 1.f) : vec3();
-	positionChange	   += isDown(input, KB_D) ? vec3(1.f, 0.f, 0.f) : vec3();
-	positionChange	   += isDown(input, KB_A) ? vec3(-1.f, 0.f, 0.f) : vec3();
-	positionChange	   *= movementSpeed * dt;
+	vec3 positionChange(0.f);
+	if (isDown(input, KB_W)) positionChange += vec3(0.f, 0.f, -1.f);
+	if (isDown(input, KB_S)) positionChange += vec3(0.f, 0.f, 1.f);
+	if (isDown(input, KB_D)) positionChange += vec3(1.f, 0.f, 0.f);
+	if (isDown(input, KB_A)) positionChange += vec3(-1.f, 0.f, 0.f);
 
 	if (input.mouse.left.isDown)
 	{
@@ -749,7 +755,7 @@ void updateScene(scene_state& scene, raw_input& input, float dt)
 	}
 
 	quat rotation = quat(vec3(0.f, 1.f, 0.f), scene.cam.yaw) * quat(vec3(1.f, 0.f, 0.f), scene.cam.pitch);
-	scene.cam.position += rotation * positionChange;
+	scene.cam.position += (rotation * positionChange) * movementSpeed * dt;
 
 	scene.cam.view = createViewMatrix(scene.cam.position, scene.cam.pitch, scene.cam.yaw);
 }
@@ -841,13 +847,17 @@ void renderScene(scene_state& scene, uint32 screenWidth, uint32 screenHeight)
 		std::cout << "resize" << std::endl;
 	}
 
-	// geometry
+	// front faces
 	bindFramebuffer(scene.frontFaceBuffer);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-	// static geometry
 	renderGeometry(scene);
 
+	// back faces
+	bindFramebuffer(scene.backFaceBuffer);
+	glClear(GL_DEPTH_BUFFER_BIT);
+	glCullFace(GL_FRONT);
+	renderGeometry(scene);
+	glCullFace(GL_BACK);
 	
 
 
@@ -858,13 +868,15 @@ void renderScene(scene_state& scene, uint32 screenWidth, uint32 screenHeight)
 	opengl_shader& ssrShader = scene.shaders[SHADER_SSR];
 	bindShader(ssrShader);
 	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, scene.frontFaceBuffer.colorTextures[0]); // position
+	glBindTexture(GL_TEXTURE_2D, scene.frontFaceBuffer.colorTextures[0]);	// position
 	glActiveTexture(GL_TEXTURE1);
-	glBindTexture(GL_TEXTURE_2D, scene.frontFaceBuffer.colorTextures[1]); // normal
+	glBindTexture(GL_TEXTURE_2D, scene.frontFaceBuffer.colorTextures[1]);	// normal
 	glActiveTexture(GL_TEXTURE2);
-	glBindTexture(GL_TEXTURE_2D, scene.frontFaceBuffer.colorTextures[2]); // color
+	glBindTexture(GL_TEXTURE_2D, scene.frontFaceBuffer.colorTextures[2]);	// color
 	glActiveTexture(GL_TEXTURE3);
-	glBindTexture(GL_TEXTURE_2D, scene.frontFaceBuffer.depthTexture); // depth
+	glBindTexture(GL_TEXTURE_2D, scene.frontFaceBuffer.depthTexture);		// front face depth
+	glActiveTexture(GL_TEXTURE4);
+	glBindTexture(GL_TEXTURE_2D, scene.backFaceBuffer.depthTexture);		// back face depth
 
 	glUniform2f(scene.ssr_screenDim, (GLfloat)screenWidth, (GLfloat)screenHeight);
 
