@@ -209,7 +209,7 @@ int main(int argc, char* argv[])
 	wndClass.style = CS_OWNDC | CS_HREDRAW | CS_VREDRAW;
 	wndClass.lpfnWndProc = windowCallBack;
 	//wndClass.hInstance = instance;
-	wndClass.lpszClassName = L"GAME WINDOW";
+	wndClass.lpszClassName = L"SSR WINDOW";
 
 	if (!RegisterClassEx(&wndClass))
 	{
@@ -227,7 +227,7 @@ int main(int argc, char* argv[])
 	int32 width = r.right - r.left;
 	int32 height = r.bottom - r.top;
 
-	HWND windowHandle = CreateWindowEx(0, wndClass.lpszClassName, L"Game", windowStyle,
+	HWND windowHandle = CreateWindowEx(0, wndClass.lpszClassName, L"SSR", windowStyle,
 		CW_USEDEFAULT, CW_USEDEFAULT, width, height,
 		0, 0, 0, 0);
 	windowPosition = { sizeof(WINDOWPLACEMENT) };
@@ -309,7 +309,7 @@ int main(int argc, char* argv[])
 			float fps = 1.f / secondsElapsed;
 
 			char titleBuffer[50];
-			sprintf(titleBuffer, "FPS: %f, %fms", fps, secondsElapsed * 1000.f);
+			sprintf(titleBuffer, "SSR --- FPS: %f, %fms", fps, secondsElapsed * 1000.f);
 			SetWindowTextA(windowHandle, titleBuffer);
 		}
 		globalTimer.printTimedBlocks();
