@@ -8,6 +8,14 @@
 #include <vector>
 #include <unordered_map>
 
+enum scene_name
+{
+	SCENE_HALLWAY,
+	SCENE_STREET,
+
+	SCENE_COUNT,
+};
+
 struct camera
 {
 	vec3 position;
@@ -76,40 +84,18 @@ enum shader_type
 	SHADER_COUNT,
 };
 
-enum model_name
-{
-	MESH_STALL,
-	MESH_PLANE,
-	MESH_SPHERE,
-
-	MESH_COUNT,
-};
-
-enum texture_name
-{
-	TEXTURE_STALL,
-	TEXTURE_GROUND,
-
-	TEXTURE_COUNT
-};
-
-struct entity
-{
-	model_name meshID;
-	texture_name textureID;
-	SQT transform;
-	float shininess;
-
-	entity(model_name meshID, texture_name textureID, const SQT& sqt, float shininess)
-		: meshID(meshID), textureID(textureID), transform(sqt), shininess(shininess) {}
-};
-
 struct material
 {
 	vec3 ambient;
 	vec3 diffuse;
 	vec3 specular;
 	float shininess;
+
+	bool hasDiffuseTexture;
+	bool hasNormalTexture;
+
+	opengl_texture diffuseTexture;
+	opengl_texture normalTexture;
 };
 
 #define MAX_POINT_LIGHTS 11
@@ -121,14 +107,13 @@ struct scene_state
 	opengl_fbo frontFaceBuffer;
 	opengl_fbo backFaceBuffer;
 
-	opengl_shader shaders[SHADER_COUNT];
-	opengl_texture textures[TEXTURE_COUNT];
-	opengl_mesh meshes[MESH_COUNT];
+	static opengl_shader shaders[SHADER_COUNT];
+
+	opengl_mesh plane;
 
 	std::vector<opengl_mesh> staticGeometry;
 	std::vector<material> staticGeometryMaterials;
 
-	std::vector<entity> entities;
 	std::vector<point_light> pointLights;
 
 	// shader uniforms
@@ -136,6 +121,8 @@ struct scene_state
 	GLuint geometry_pl_position[MAX_POINT_LIGHTS], geometry_pl_radius[MAX_POINT_LIGHTS], geometry_pl_color[MAX_POINT_LIGHTS];
 
 	GLuint material_MVP, material_MV, material_numberOfPointLights, material_ambient, material_diffuse, material_specular, material_shininess;
+	GLuint material_hasDiffuseTexture;
+
 	GLuint material_pl_position[MAX_POINT_LIGHTS], material_pl_radius[MAX_POINT_LIGHTS], material_pl_color[MAX_POINT_LIGHTS];
 
 	GLuint ssr_screenDim, ssr_proj, ssr_invProj, ssr_clippingPlanes;
@@ -261,7 +248,7 @@ inline bool buttonUpEvent(raw_input& input, char c)
 	return false;
 }
 
-void initializeScene(scene_state& scene, uint32 screenWidth, uint32 screenHeight);
+void initializeScene(scene_state& scene, scene_name name, uint32 screenWidth, uint32 screenHeight);
 void updateScene(scene_state& scene, raw_input& input, float dt);
 void renderScene(scene_state& scene, uint32 screenWidth, uint32 screenHeight);
 void cleanupScene(scene_state& scene);

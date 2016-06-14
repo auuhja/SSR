@@ -3,38 +3,38 @@
 
 newmtl roof
 Ns 96.078431
-Ka 1.000000 1.000000 1.000000
+Ka 0.050000 0.050000 0.050000
 Kd 0.186413 0.015597 0.010204
 Ks 0.000000 0.000000 0.000000
 Ke 0.000000 0.000000 0.000000
 Ni 1.000000
 d 1.000000
 illum 1
-map_Kd C:\Users\Philipp\Pictures\textures\roof.jpg
+map_Kd roof.jpg
 
 newmtl street_blender
 Ns 96.078431
-Ka 1.000000 1.000000 1.000000
+Ka 0.050000 0.050000 0.050000
 Kd 0.307500 0.288256 0.143034
 Ks 0.500000 0.392759 0.178706
 Ke 0.000000 0.000000 0.000000
 Ni 1.000000
 d 1.000000
 illum 2
-map_Bump C:\\Users\\Philipp\\Pictures\\textures\\FloorStreets0072_1_S_NRM.jpg
-map_Kd C:\\Users\\Philipp\\Pictures\\textures\\FloorStreets0072_1_S_COLOR.jpg
+map_Bump FloorStreets0072_1_S_NRM.jpg
+map_Kd FloorStreets0072_1_S_COLOR.jpg
 
 newmtl wall_blender
 Ns 96.078431
-Ka 1.000000 1.000000 1.000000
+Ka 0.050000 0.050000 0.050000
 Kd 0.018921 0.017321 0.018209
 Ks 0.184932 0.184932 0.184932
 Ke 0.000000 0.000000 0.000000
 Ni 1.000000
 d 1.000000
 illum 2
-map_Bump C:\\Users\\Philipp\\Pictures\\textures\\Wall_NRM.jpg
-map_Kd C:\\Users\\Philipp\\Pictures\\textures\\Wall_COLOR.jpg
+map_Bump Wall_NRM.jpg
+map_Kd Wall_COLOR.jpg
 
 newmtl water_blender
 Ns 96.078431

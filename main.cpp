@@ -10,7 +10,7 @@
 static uint32 clientWidth;
 static uint32 clientHeight;
 static bool running;
-static WINDOWPLACEMENT windowPosition;
+static uint32 currentScene = SCENE_HALLWAY;
 
 timer globalTimer;
 
@@ -230,7 +230,6 @@ int main(int argc, char* argv[])
 	HWND windowHandle = CreateWindowEx(0, wndClass.lpszClassName, L"SSR", windowStyle,
 		CW_USEDEFAULT, CW_USEDEFAULT, width, height,
 		0, 0, 0, 0);
-	windowPosition = { sizeof(WINDOWPLACEMENT) };
 
 	if (!windowHandle)
 	{
@@ -248,8 +247,9 @@ int main(int argc, char* argv[])
 
 	ShowWindow(windowHandle, SW_SHOW);
 
-	scene_state scene;
-	initializeScene(scene, clientWidth, clientHeight);
+	scene_state scenes[SCENE_COUNT];
+	for (uint32 i = 0; i < SCENE_COUNT; ++i)
+		initializeScene(scenes[i], (scene_name)i, clientWidth, clientHeight);
 
 	LARGE_INTEGER perfFreqResult;
 	QueryPerformanceFrequency(&perfFreqResult);
@@ -291,11 +291,19 @@ int main(int argc, char* argv[])
 
 		{	//TIMED_BLOCK("messages")
 			processPendingMessages(clientWidth, clientHeight, *lastInput, *curInput);
+			for (uint32 i = 0; i < 9; ++i)
+			{
+				if (buttonDownEvent(*curInput, (kb_button)(KB_1 + i)))
+				{
+					std::cout << i << std::endl;
+					currentScene = i;
+				}
+			}
 		}
 
 		{	//TIMED_BLOCK("update and render")
-			updateScene(scene, *curInput, secondsElapsed);
-			renderScene(scene, clientWidth, clientHeight);
+			updateScene(scenes[currentScene], *curInput, secondsElapsed);
+			renderScene(scenes[currentScene], clientWidth, clientHeight);
 		}
 
 		{	//TIMED_BLOCK("rest")
@@ -315,7 +323,8 @@ int main(int argc, char* argv[])
 		globalTimer.printTimedBlocks();
 	}
 
-	cleanupScene(scene);
+	for (uint32 i = 0; i < SCENE_COUNT; ++i)
+		cleanupScene(scenes[i]);
 }
 
 uint64 getFileWriteTime(const char* filename)

@@ -250,7 +250,7 @@ void main()
 
 	vec3 viewDir = normalize(position);
 	vec3 rayDirection = normalize(reflect(viewDir, normal));
-	vec3 rayOrigin = position + rayDirection * 1;
+	vec3 rayOrigin = position;
 
 	float maxRayTraceDistance = 100;
 	float stride = 10;

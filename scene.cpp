@@ -9,18 +9,16 @@
 
 #include <string>
 
+static bool loadTexture(opengl_texture& texture, const std::string& filename);
+
+
+opengl_shader scene_state::shaders[SHADER_COUNT];
 
 #pragma pack(push, 1)
 struct vertex3PTN
 {
 	vec3 pos;
 	vec2 tex;
-	vec3 nor;
-};
-
-struct vertex3PN
-{
-	vec3 pos;
 	vec3 nor;
 };
 #pragma pack(pop)
@@ -43,31 +41,6 @@ static void uploadVertexData(opengl_mesh& mesh, const std::vector<vertex3PTN>& v
 	// normals
 	glEnableVertexAttribArray(2);
 	glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(vertex3PTN), (void*)(5 * sizeof(GLfloat)));
-
-	glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-	glGenBuffers(1, &mesh.ibo);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh.ibo);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(uint32), &indices[0], GL_STATIC_DRAW);
-
-	glBindVertexArray(0);
-}
-
-static void uploadVertexData(opengl_mesh& mesh, const std::vector<vertex3PN>& vertices, const std::vector<uint32>& indices)
-{
-	glGenVertexArrays(1, &mesh.vao);
-	glBindVertexArray(mesh.vao);
-
-	glGenBuffers(1, &mesh.vbo);
-	glBindBuffer(GL_ARRAY_BUFFER, mesh.vbo);
-	glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(vertex3PN), &vertices[0], GL_STATIC_DRAW);
-
-	// positions
-	glEnableVertexAttribArray(0);
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(vertex3PN), (void*)0);
-	// normals
-	glEnableVertexAttribArray(2);
-	glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(vertex3PN), (void*)(3 * sizeof(GLfloat)));
 
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 
@@ -117,6 +90,9 @@ static bool loadStaticGeometry(std::vector<opengl_mesh>& meshes, std::vector<mat
 			vertex3PTN vertex;
 			vertex.pos = vec3(pos.x, pos.y, pos.z);
 			vertex.tex = vec2(0, 0);
+			if (aiMesh->HasTextureCoords(0))
+				vertex.tex = vec2(aiMesh->mTextureCoords[0][i].x, aiMesh->mTextureCoords[0][i].y);
+
 			vertex.nor = vec3(nor.x, nor.y, nor.z);
 			vertices.push_back(vertex);
 		}
@@ -131,11 +107,10 @@ static bool loadStaticGeometry(std::vector<opengl_mesh>& meshes, std::vector<mat
 
 		uploadVertexData(mesh, vertices, indices);
 
-		material material;
+		material material = { 0 };
 		aiMaterial* mat = aiScene->mMaterials[aiMesh->mMaterialIndex];
 		aiString name;
 		mat->Get(AI_MATKEY_NAME, name);
-		std::cout << name.C_Str() << std::endl;
 
 		aiColor3D color;
 		mat->Get(AI_MATKEY_COLOR_AMBIENT, color);
@@ -151,7 +126,20 @@ static bool loadStaticGeometry(std::vector<opengl_mesh>& meshes, std::vector<mat
 		mat->Get(AI_MATKEY_SHININESS, shininess);
 		material.shininess = shininess;
 
-		std::cout << material.ambient << " " << material.diffuse << std::endl;
+		aiString texPath;
+		if (mat->GetTexture(aiTextureType_DIFFUSE, 0, &texPath) == aiReturn_SUCCESS)
+		{
+			std::cout << name.C_Str() << " has diffuse: " << texPath.C_Str() << std::endl;
+			material.hasDiffuseTexture = true;
+			loadTexture(material.diffuseTexture, texPath.C_Str());
+		}
+		if (mat->GetTexture(aiTextureType_NORMALS, 0, &texPath) == aiReturn_SUCCESS)
+		{
+			std::cout << name.C_Str() << " has normal: " << texPath.C_Str() << std::endl;
+			material.hasNormalTexture = true;
+			loadTexture(material.normalTexture, texPath.C_Str());
+		}
+
 
 		meshes.push_back(mesh);
 		materials.push_back(material);
@@ -628,6 +616,7 @@ static bool loadAllShaders(scene_state& scene)
 			scene.material_diffuse = glGetUniformLocation(shader.programID, "diffuse");
 			scene.material_specular = glGetUniformLocation(shader.programID, "specular");
 			scene.material_shininess = glGetUniformLocation(shader.programID, "shininess");
+			scene.material_hasDiffuseTexture = glGetUniformLocation(shader.programID, "hasDiffuseTexture");
 
 			for (uint32 i = 0; i < MAX_POINT_LIGHTS; ++i)
 			{
@@ -637,6 +626,7 @@ static bool loadAllShaders(scene_state& scene)
 				scene.material_pl_color[i] = glGetUniformLocation(shader.programID, (uniformName + "color").c_str());
 			}
 
+			glUniform1i(glGetUniformLocation(shader.programID, "diffuseTexture"), 0);
 
 			reloaded = true;
 		}
@@ -664,7 +654,7 @@ static bool loadAllShaders(scene_state& scene)
 	return reloaded;
 }
 
-void initializeScene(scene_state& scene, uint32 screenWidth, uint32 screenHeight)
+void initializeScene(scene_state& scene, scene_name name, uint32 screenWidth, uint32 screenHeight)
 {
 	initializeFBOs(scene.frontFaceBuffer, scene.backFaceBuffer, screenWidth, screenHeight);
 
@@ -675,30 +665,13 @@ void initializeScene(scene_state& scene, uint32 screenWidth, uint32 screenHeight
 		loadAllShaders(scene);
 	}
 
+	loadMesh(scene.plane, "plane.obj");
+
 	// meshes
+	if (name == SCENE_HALLWAY)
 	{
 		loadStaticGeometry(scene.staticGeometry, scene.staticGeometryMaterials, "hallway/space_station_interior.obj");
-
-		loadMesh(scene.meshes[MESH_PLANE], "plane.obj");
-		loadMesh(scene.meshes[MESH_STALL], "stall.obj");
-		loadMesh(scene.meshes[MESH_SPHERE], "sphere.obj");
-	}
-
-	// textures
-	{
-		loadTexture(scene.textures[TEXTURE_STALL], "stall.png");
-		loadTexture(scene.textures[TEXTURE_GROUND], "ground.png");
-	}
-
-	// entities
-	{
-		scene.entities.push_back(entity(MESH_STALL, TEXTURE_STALL, SQT(vec3(0, 0, -15), quat(vec3(0.f, 1.f, 0.f), degreesToRadians(90.f)), 1.f), 0.f));
-		scene.entities.push_back(entity(MESH_PLANE, TEXTURE_GROUND, SQT(vec3(0, 0, 0), quat(vec3(1.f, 0.f, 0.f), degreesToRadians(-90.f)), 100.f), 1.f));
-		scene.entities.push_back(entity(MESH_PLANE, TEXTURE_GROUND, SQT(vec3(0, 0, -30), quat(), 100.f), 1.f));
-	}
-
-	// lights
-	{
+	
 		float lightHeight = 7.5f;
 		float radius = 15.f;
 		float lightDistance = 9.1f;
@@ -709,6 +682,19 @@ void initializeScene(scene_state& scene, uint32 screenWidth, uint32 screenHeight
 		}
 
 		scene.pointLights.push_back(point_light(vec3(18.2f, lightHeight-2.f, -13.8f), radius, vec3(1.f, 1.f, 1.f)));
+	}
+	else if (name == SCENE_STREET)
+	{
+		loadStaticGeometry(scene.staticGeometry, scene.staticGeometryMaterials, "street/street.obj");
+
+		// TODO: right light positions
+		float lightHeight = 7.5f;
+		float radius = 15.f;
+		float lightDistance = 9.1f;
+		for (uint32 i = 0; i < 10; ++i)
+		{
+			scene.pointLights.push_back(point_light(vec3(-41.f + i * lightDistance, lightHeight, 0.f), radius, vec3(1.f, 1.f, 1.f)));
+		}
 	}
 
 	// camera
@@ -762,33 +748,6 @@ void updateScene(scene_state& scene, raw_input& input, float dt)
 
 static void renderGeometry(scene_state& scene)
 {
-	opengl_shader& geometryShader = scene.shaders[SHADER_GEOMETRY];
-	/*bindShader(geometryShader);
-
-	glUniform1i(scene.geometry_numberOfPointLights, (int32)scene.pointLights.size());
-	for (uint32 i = 0; i < min(scene.pointLights.size(), MAX_POINT_LIGHTS); ++i)
-	{
-	vec4 posVS = scene.cam.view * vec4(scene.pointLights[i].position, 1.f);
-	glUniform3f(scene.geometry_pl_position[i], posVS.x, posVS.y, posVS.z);
-	glUniform1f(scene.geometry_pl_radius[i], scene.pointLights[i].radius);
-	glUniform3f(scene.geometry_pl_color[i], scene.pointLights[i].color.x, scene.pointLights[i].color.y, scene.pointLights[i].color.z);
-	}
-
-	for (entity& ent : scene.entities)
-	{
-	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, scene.textures[ent.textureID].textureID);
-
-	mat4 MV = scene.cam.view * sqtToMat4(ent.transform);
-	mat4 MVP = scene.cam.proj * MV;
-
-	glUniformMatrix4fv(scene.geometry_MV, 1, GL_FALSE, MV.data);
-	glUniformMatrix4fv(scene.geometry_MVP, 1, GL_FALSE, MVP.data);
-	glUniform1f(scene.geometry_shininess, ent.shininess);
-
-	bindAndDrawMesh(scene.meshes[ent.meshID]);
-	}*/
-
 	opengl_shader& materialShader = scene.shaders[SHADER_MATERIAL];
 	bindShader(materialShader);
 
@@ -807,10 +766,25 @@ static void renderGeometry(scene_state& scene)
 
 		glUniformMatrix4fv(scene.material_MV, 1, GL_FALSE, MV.data);
 		glUniformMatrix4fv(scene.material_MVP, 1, GL_FALSE, MVP.data);
+
+		// material properties
 		glUniform3f(scene.material_ambient, scene.staticGeometryMaterials[i].ambient.x, scene.staticGeometryMaterials[i].ambient.y, scene.staticGeometryMaterials[i].ambient.z);
 		glUniform3f(scene.material_diffuse, scene.staticGeometryMaterials[i].diffuse.x, scene.staticGeometryMaterials[i].diffuse.y, scene.staticGeometryMaterials[i].diffuse.z);
 		glUniform3f(scene.material_specular, scene.staticGeometryMaterials[i].specular.x, scene.staticGeometryMaterials[i].specular.y, scene.staticGeometryMaterials[i].specular.z);
 		glUniform1f(scene.material_shininess, scene.staticGeometryMaterials[i].shininess);
+
+		if (scene.staticGeometryMaterials[i].hasDiffuseTexture)
+		{
+			glUniform1i(scene.material_hasDiffuseTexture, 1);
+
+			glActiveTexture(GL_TEXTURE0);
+			glBindTexture(GL_TEXTURE_2D, scene.staticGeometryMaterials[i].diffuseTexture.textureID);
+		}
+		else
+		{
+			glUniform1i(scene.material_hasDiffuseTexture, 0);
+		}
+
 		bindAndDrawMesh(scene.staticGeometry[i]);
 	}
 
@@ -887,17 +861,16 @@ void renderScene(scene_state& scene, uint32 screenWidth, uint32 screenHeight)
 	
 	glUniform2f(scene.ssr_clippingPlanes, scene.cam.nearPlane, scene.cam.farPlane);
 
-	bindAndDrawMesh(scene.meshes[MESH_PLANE]);
+	bindAndDrawMesh(scene.plane);
 }
 
 void cleanupScene(scene_state& scene)
 {
 	for (uint32 i = 0; i < SHADER_COUNT; ++i)
 		deleteShader(scene.shaders[i]);
-	for (uint32 i = 0; i < MESH_COUNT; ++i)
-		deleteMesh(scene.meshes[i]);
-	for (uint32 i = 0; i < TEXTURE_COUNT; ++i)
-		deleteTexture(scene.textures[i]);
+
+	for (opengl_mesh& mesh : scene.staticGeometry)
+		deleteMesh(mesh);
 
 	deleteFBO(scene.frontFaceBuffer);
 	deleteFBO(scene.backFaceBuffer);

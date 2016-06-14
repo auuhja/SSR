@@ -2,6 +2,7 @@
 #version 330
 
 layout (location = 0) in vec3 in_position;
+layout (location = 1) in vec2 in_texCoords;
 layout (location = 2) in vec3 in_normal;
 
 uniform mat4 MV;
@@ -9,6 +10,7 @@ uniform mat4 MVP;
 
 out vec3 position;
 out vec3 normal;
+out vec2 texCoords;
 
 void main()
 {
@@ -16,6 +18,7 @@ void main()
 
 	position = (MV * pos).xyz;
 	normal = (MV * vec4(in_normal, 0.0)).xyz;
+	texCoords = in_texCoords;
 
 	gl_Position = MVP * pos;
 }
@@ -27,6 +30,7 @@ void main()
 
 in vec3 position;
 in vec3 normal;
+in vec2 texCoords;
 
 struct point_light
 {
@@ -37,10 +41,17 @@ struct point_light
 
 #define MAX_POINT_LIGHTS 11
 
+// material properties
 uniform vec3 ambient;
 uniform vec3 diffuse;
 uniform vec3 specular;
 uniform float shininess;
+
+uniform int hasDiffuseTexture;
+uniform sampler2D diffuseTexture;
+
+//uniform bool hasNormalTexture;
+
 
 uniform int numberOfPointLights;
 uniform point_light pointLights[MAX_POINT_LIGHTS];
@@ -59,6 +70,12 @@ void main()
 	vec3 ambientColor = vec3(0.0);
 	vec3 diffuseColor = vec3(0.0);
 	vec3 specularColor = vec3(0.0);
+	
+	vec3 diffuseTexColor = vec3(1.0);
+	if (hasDiffuseTexture == 1)
+		diffuseTexColor = texture2D(diffuseTexture, texCoords).rgb;
+	else
+		diffuseTexColor = diffuse;
 
 	for (int i = 0; i < min(MAX_POINT_LIGHTS, numberOfPointLights); ++i)
 	{
@@ -76,10 +93,11 @@ void main()
 		float specularFactor = pow(clamp(dot(E, R), 0.f, 1.f), shininess);
 
 		ambientColor += ambient * pointLights[i].color * attenuation;
-		diffuseColor += diffuseFactor * pointLights[i].color * diffuse * attenuation;
+		diffuseColor += diffuseFactor * pointLights[i].color * diffuseTexColor * attenuation;
 		specularColor += specularFactor * pointLights[i].color * attenuation;
 	}
 
 	out_color.rgb = diffuseColor + ambientColor + specularColor;
+	out_color.rgb = diffuseColor + ambientColor;
 	out_color.a = shininess;
 }
