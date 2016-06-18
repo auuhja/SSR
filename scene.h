@@ -22,7 +22,7 @@ struct camera
 	float pitch;
 	float yaw;
 
-	float aspect;
+	uint32 width, height;
 	float verticalFOV;
 	float nearPlane;
 	float farPlane;
@@ -104,25 +104,26 @@ struct scene_state
 {
 	camera cam;
 
-	opengl_fbo frontFaceBuffer;
-	opengl_fbo backFaceBuffer;
-
-	static opengl_shader shaders[SHADER_COUNT];
-
-	opengl_mesh plane;
-
 	std::vector<opengl_mesh> staticGeometry;
 	std::vector<material> staticGeometryMaterials;
 
 	std::vector<point_light> pointLights;
+};
+
+struct opengl_renderer
+{
+	uint32 width, height;
+
+	opengl_fbo frontFaceBuffer;
+	opengl_fbo backFaceBuffer;
+
+	opengl_mesh plane;
+
+	opengl_shader shaders[SHADER_COUNT];
 
 	// shader uniforms
-	GLuint geometry_MVP, geometry_MV, geometry_numberOfPointLights, geometry_shininess;
-	GLuint geometry_pl_position[MAX_POINT_LIGHTS], geometry_pl_radius[MAX_POINT_LIGHTS], geometry_pl_color[MAX_POINT_LIGHTS];
-
 	GLuint material_MVP, material_MV, material_numberOfPointLights, material_ambient, material_diffuse, material_specular, material_shininess;
 	GLuint material_hasDiffuseTexture;
-
 	GLuint material_pl_position[MAX_POINT_LIGHTS], material_pl_radius[MAX_POINT_LIGHTS], material_pl_color[MAX_POINT_LIGHTS];
 
 	GLuint ssr_screenDim, ssr_proj, ssr_invProj, ssr_clippingPlanes;
@@ -248,7 +249,11 @@ inline bool buttonUpEvent(raw_input& input, char c)
 	return false;
 }
 
+void initializeRenderer(opengl_renderer& renderer, uint32 screenWidth, uint32 screenHeight);
 void initializeScene(scene_state& scene, scene_name name, uint32 screenWidth, uint32 screenHeight);
+
 void updateScene(scene_state& scene, raw_input& input, float dt);
-void renderScene(scene_state& scene, uint32 screenWidth, uint32 screenHeight);
+void renderScene(opengl_renderer& renderer, scene_state& scene, uint32 screenWidth, uint32 screenHeight);
+
+void cleanupRenderer(opengl_renderer& renderer);
 void cleanupScene(scene_state& scene);

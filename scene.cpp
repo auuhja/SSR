@@ -12,8 +12,6 @@
 static bool loadTexture(opengl_texture& texture, const std::string& filename);
 
 
-opengl_shader scene_state::shaders[SHADER_COUNT];
-
 #pragma pack(push, 1)
 struct vertex3PTN
 {
@@ -578,52 +576,29 @@ static bool initializeFBOs(opengl_fbo& frontFaceBuffer, opengl_fbo& backFaceBuff
 	return frontFaceBufferSucess && backFaceBufferSuccess;
 }
 
-static bool loadAllShaders(scene_state& scene)
+static bool loadAllShaders(opengl_renderer& renderer)
 {
 	bool reloaded = false;
 	{
-		opengl_shader& shader = scene.shaders[SHADER_GEOMETRY];
-		if (loadShader(shader, "geometry_shader.glsl"))
-		{
-			bindShader(shader);
-			scene.geometry_MVP = glGetUniformLocation(shader.programID, "MVP");
-			scene.geometry_MV = glGetUniformLocation(shader.programID, "MV");
-			scene.geometry_shininess = glGetUniformLocation(shader.programID, "shininess");
-			scene.geometry_numberOfPointLights = glGetUniformLocation(shader.programID, "numberOfPointLights");
-
-			for (uint32 i = 0; i < MAX_POINT_LIGHTS; ++i)
-			{
-				std::string uniformName = std::string("pointLights[") + std::to_string(i) + "].";
-				scene.geometry_pl_position[i] = glGetUniformLocation(shader.programID, (uniformName + "position").c_str());
-				scene.geometry_pl_radius[i] = glGetUniformLocation(shader.programID, (uniformName + "radius").c_str());
-				scene.geometry_pl_color[i] = glGetUniformLocation(shader.programID, (uniformName + "color").c_str());
-			}
-
-			glUniform1i(glGetUniformLocation(shader.programID, "texture"), 0);
-
-			reloaded = true;
-		}
-	}
-	{
-		opengl_shader& shader = scene.shaders[SHADER_MATERIAL];
+		opengl_shader& shader = renderer.shaders[SHADER_MATERIAL];
 		if (loadShader(shader, "material_shader.glsl"))
 		{
 			bindShader(shader);
-			scene.material_MVP = glGetUniformLocation(shader.programID, "MVP");
-			scene.material_MV = glGetUniformLocation(shader.programID, "MV");
-			scene.material_numberOfPointLights = glGetUniformLocation(shader.programID, "numberOfPointLights");
-			scene.material_ambient = glGetUniformLocation(shader.programID, "ambient");
-			scene.material_diffuse = glGetUniformLocation(shader.programID, "diffuse");
-			scene.material_specular = glGetUniformLocation(shader.programID, "specular");
-			scene.material_shininess = glGetUniformLocation(shader.programID, "shininess");
-			scene.material_hasDiffuseTexture = glGetUniformLocation(shader.programID, "hasDiffuseTexture");
+			renderer.material_MVP = glGetUniformLocation(shader.programID, "MVP");
+			renderer.material_MV = glGetUniformLocation(shader.programID, "MV");
+			renderer.material_numberOfPointLights = glGetUniformLocation(shader.programID, "numberOfPointLights");
+			renderer.material_ambient = glGetUniformLocation(shader.programID, "ambient");
+			renderer.material_diffuse = glGetUniformLocation(shader.programID, "diffuse");
+			renderer.material_specular = glGetUniformLocation(shader.programID, "specular");
+			renderer.material_shininess = glGetUniformLocation(shader.programID, "shininess");
+			renderer.material_hasDiffuseTexture = glGetUniformLocation(shader.programID, "hasDiffuseTexture");
 
 			for (uint32 i = 0; i < MAX_POINT_LIGHTS; ++i)
 			{
 				std::string uniformName = std::string("pointLights[") + std::to_string(i) + "].";
-				scene.material_pl_position[i] = glGetUniformLocation(shader.programID, (uniformName + "position").c_str());
-				scene.material_pl_radius[i] = glGetUniformLocation(shader.programID, (uniformName + "radius").c_str());
-				scene.material_pl_color[i] = glGetUniformLocation(shader.programID, (uniformName + "color").c_str());
+				renderer.material_pl_position[i] = glGetUniformLocation(shader.programID, (uniformName + "position").c_str());
+				renderer.material_pl_radius[i] = glGetUniformLocation(shader.programID, (uniformName + "radius").c_str());
+				renderer.material_pl_color[i] = glGetUniformLocation(shader.programID, (uniformName + "color").c_str());
 			}
 
 			glUniform1i(glGetUniformLocation(shader.programID, "diffuseTexture"), 0);
@@ -632,14 +607,14 @@ static bool loadAllShaders(scene_state& scene)
 		}
 	}
 	{
-		opengl_shader& shader = scene.shaders[SHADER_SSR];
+		opengl_shader& shader = renderer.shaders[SHADER_SSR];
 		if (loadShader(shader, "ssr_shader.glsl"))
 		{
 			bindShader(shader);
-			scene.ssr_screenDim = glGetUniformLocation(shader.programID, "screenDim");
-			scene.ssr_proj = glGetUniformLocation(shader.programID, "proj");
-			scene.ssr_invProj = glGetUniformLocation(shader.programID, "invProj");
-			scene.ssr_clippingPlanes = glGetUniformLocation(shader.programID, "clippingPlanes");
+			renderer.ssr_screenDim = glGetUniformLocation(shader.programID, "screenDim");
+			renderer.ssr_proj = glGetUniformLocation(shader.programID, "proj");
+			renderer.ssr_invProj = glGetUniformLocation(shader.programID, "invProj");
+			renderer.ssr_clippingPlanes = glGetUniformLocation(shader.programID, "clippingPlanes");
 			
 			glUniform1i(glGetUniformLocation(shader.programID, "positionTexture"), 0);
 			glUniform1i(glGetUniformLocation(shader.programID, "normalTexture"), 1);
@@ -654,19 +629,30 @@ static bool loadAllShaders(scene_state& scene)
 	return reloaded;
 }
 
-void initializeScene(scene_state& scene, scene_name name, uint32 screenWidth, uint32 screenHeight)
+void initializeRenderer(opengl_renderer& renderer, uint32 screenWidth, uint32 screenHeight)
 {
-	initializeFBOs(scene.frontFaceBuffer, scene.backFaceBuffer, screenWidth, screenHeight);
+	initializeFBOs(renderer.frontFaceBuffer, renderer.backFaceBuffer, screenWidth, screenHeight);
 
+	renderer.width = screenWidth;
+	renderer.height = screenHeight;
+	
 	// shaders
 	{
 		for (uint32 i = 0; i < SHADER_COUNT; ++i)
-			scene.shaders[i].writeTime = 0;
-		loadAllShaders(scene);
+			renderer.shaders[i].writeTime = 0;
+		loadAllShaders(renderer);
 	}
 
-	loadMesh(scene.plane, "plane.obj");
+	loadMesh(renderer.plane, "plane.obj");
 
+	glClearColor(0.18f, 0.35f, 0.5f, 1.0f);
+	glEnable(GL_CULL_FACE);
+	glCullFace(GL_BACK);
+	glEnable(GL_DEPTH_TEST);
+}
+
+void initializeScene(scene_state& scene, scene_name name, uint32 screenWidth, uint32 screenHeight)
+{
 	// meshes
 	if (name == SCENE_HALLWAY)
 	{
@@ -705,17 +691,13 @@ void initializeScene(scene_state& scene, scene_name name, uint32 screenWidth, ui
 		scene.cam.pitch = 0.f;
 		scene.cam.yaw = 0.f;
 		scene.cam.verticalFOV = degreesToRadians(70.f);
-		scene.cam.aspect = (float)screenWidth / (float)screenHeight;
-		scene.cam.proj = createProjectionMatrix(scene.cam.verticalFOV, scene.cam.aspect, scene.cam.nearPlane, scene.cam.farPlane);
+		scene.cam.width = screenWidth;
+		scene.cam.height = screenHeight;
+		float aspect = (float)screenWidth / (float)screenHeight;
+		scene.cam.proj = createProjectionMatrix(scene.cam.verticalFOV, aspect, scene.cam.nearPlane, scene.cam.farPlane);
 		scene.cam.invProj = inverted(scene.cam.proj);
 		scene.cam.view = createViewMatrix(scene.cam.position, scene.cam.pitch, scene.cam.yaw);
 	}
-
-
-	glClearColor(0.18f, 0.35f, 0.5f, 1.0f);
-	glEnable(GL_CULL_FACE);
-	glCullFace(GL_BACK);
-	glEnable(GL_DEPTH_TEST);
 }
 
 void updateScene(scene_state& scene, raw_input& input, float dt)
@@ -746,43 +728,43 @@ void updateScene(scene_state& scene, raw_input& input, float dt)
 	scene.cam.view = createViewMatrix(scene.cam.position, scene.cam.pitch, scene.cam.yaw);
 }
 
-static void renderGeometry(scene_state& scene)
+static void renderGeometry(opengl_renderer& renderer, scene_state& scene)
 {
-	opengl_shader& materialShader = scene.shaders[SHADER_MATERIAL];
+	opengl_shader& materialShader = renderer.shaders[SHADER_MATERIAL];
 	bindShader(materialShader);
 
-	glUniform1i(scene.material_numberOfPointLights, (int32)scene.pointLights.size());
+	glUniform1i(renderer.material_numberOfPointLights, (int32)scene.pointLights.size());
 	for (uint32 i = 0; i < min(scene.pointLights.size(), MAX_POINT_LIGHTS); ++i)
 	{
 		vec4 posVS = scene.cam.view * vec4(scene.pointLights[i].position, 1.f);
-		glUniform3f(scene.material_pl_position[i], posVS.x, posVS.y, posVS.z);
-		glUniform1f(scene.material_pl_radius[i], scene.pointLights[i].radius);
-		glUniform3f(scene.material_pl_color[i], scene.pointLights[i].color.x, scene.pointLights[i].color.y, scene.pointLights[i].color.z);
+		glUniform3f(renderer.material_pl_position[i], posVS.x, posVS.y, posVS.z);
+		glUniform1f(renderer.material_pl_radius[i], scene.pointLights[i].radius);
+		glUniform3f(renderer.material_pl_color[i], scene.pointLights[i].color.x, scene.pointLights[i].color.y, scene.pointLights[i].color.z);
 	}
 	for (uint32 i = 0; i < scene.staticGeometry.size(); ++i)
 	{
 		mat4 MV = scene.cam.view;
 		mat4 MVP = scene.cam.proj * MV;
 
-		glUniformMatrix4fv(scene.material_MV, 1, GL_FALSE, MV.data);
-		glUniformMatrix4fv(scene.material_MVP, 1, GL_FALSE, MVP.data);
+		glUniformMatrix4fv(renderer.material_MV, 1, GL_FALSE, MV.data);
+		glUniformMatrix4fv(renderer.material_MVP, 1, GL_FALSE, MVP.data);
 
 		// material properties
-		glUniform3f(scene.material_ambient, scene.staticGeometryMaterials[i].ambient.x, scene.staticGeometryMaterials[i].ambient.y, scene.staticGeometryMaterials[i].ambient.z);
-		glUniform3f(scene.material_diffuse, scene.staticGeometryMaterials[i].diffuse.x, scene.staticGeometryMaterials[i].diffuse.y, scene.staticGeometryMaterials[i].diffuse.z);
-		glUniform3f(scene.material_specular, scene.staticGeometryMaterials[i].specular.x, scene.staticGeometryMaterials[i].specular.y, scene.staticGeometryMaterials[i].specular.z);
-		glUniform1f(scene.material_shininess, scene.staticGeometryMaterials[i].shininess);
+		glUniform3f(renderer.material_ambient, scene.staticGeometryMaterials[i].ambient.x, scene.staticGeometryMaterials[i].ambient.y, scene.staticGeometryMaterials[i].ambient.z);
+		glUniform3f(renderer.material_diffuse, scene.staticGeometryMaterials[i].diffuse.x, scene.staticGeometryMaterials[i].diffuse.y, scene.staticGeometryMaterials[i].diffuse.z);
+		glUniform3f(renderer.material_specular, scene.staticGeometryMaterials[i].specular.x, scene.staticGeometryMaterials[i].specular.y, scene.staticGeometryMaterials[i].specular.z);
+		glUniform1f(renderer.material_shininess, scene.staticGeometryMaterials[i].shininess);
 
 		if (scene.staticGeometryMaterials[i].hasDiffuseTexture)
 		{
-			glUniform1i(scene.material_hasDiffuseTexture, 1);
+			glUniform1i(renderer.material_hasDiffuseTexture, 1);
 
 			glActiveTexture(GL_TEXTURE0);
 			glBindTexture(GL_TEXTURE_2D, scene.staticGeometryMaterials[i].diffuseTexture.textureID);
 		}
 		else
 		{
-			glUniform1i(scene.material_hasDiffuseTexture, 0);
+			glUniform1i(renderer.material_hasDiffuseTexture, 0);
 		}
 
 		bindAndDrawMesh(scene.staticGeometry[i]);
@@ -804,33 +786,39 @@ static void renderGeometry(scene_state& scene)
 	}*/
 }
 
-void renderScene(scene_state& scene, uint32 screenWidth, uint32 screenHeight)
+void renderScene(opengl_renderer& renderer, scene_state& scene, uint32 screenWidth, uint32 screenHeight)
 {
-	loadAllShaders(scene);
-	float aspect = (float)screenWidth / (float)screenHeight;
-	if (aspect != scene.cam.aspect)
+	loadAllShaders(renderer);
+
+	if (screenWidth != renderer.width || screenHeight != renderer.height)
 	{
-		deleteFBO(scene.frontFaceBuffer);
-		deleteFBO(scene.backFaceBuffer);
-		initializeFBOs(scene.frontFaceBuffer, scene.backFaceBuffer, screenWidth, screenHeight);
+		deleteFBO(renderer.frontFaceBuffer);
+		deleteFBO(renderer.backFaceBuffer);
+		initializeFBOs(renderer.frontFaceBuffer, renderer.backFaceBuffer, screenWidth, screenHeight);
+		renderer.width = screenWidth;
+		renderer.height = screenHeight;
+	}
 
-		scene.cam.aspect = aspect;
-		scene.cam.proj = createProjectionMatrix(scene.cam.verticalFOV, scene.cam.aspect, scene.cam.nearPlane, scene.cam.farPlane);
+	if (screenWidth != scene.cam.width || screenHeight != scene.cam.height)
+	{
+		scene.cam.width = screenWidth;
+		scene.cam.height = screenHeight;
+		float aspect = (float)screenWidth / (float)screenHeight;
+		scene.cam.proj = createProjectionMatrix(scene.cam.verticalFOV, aspect, scene.cam.nearPlane, scene.cam.farPlane);
 		scene.cam.invProj = inverted(scene.cam.proj);
-
 		std::cout << "resize" << std::endl;
 	}
 
 	// front faces
-	bindFramebuffer(scene.frontFaceBuffer);
+	bindFramebuffer(renderer.frontFaceBuffer);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	renderGeometry(scene);
+	renderGeometry(renderer, scene);
 
 	// back faces
-	bindFramebuffer(scene.backFaceBuffer);
+	bindFramebuffer(renderer.backFaceBuffer);
 	glClear(GL_DEPTH_BUFFER_BIT);
 	glCullFace(GL_FRONT);
-	renderGeometry(scene);
+	renderGeometry(renderer, scene);
 	glCullFace(GL_BACK);
 	
 
@@ -839,39 +827,46 @@ void renderScene(scene_state& scene, uint32 screenWidth, uint32 screenHeight)
 	bindDefaultFramebuffer(screenWidth, screenHeight);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	opengl_shader& ssrShader = scene.shaders[SHADER_SSR];
+	opengl_shader& ssrShader = renderer.shaders[SHADER_SSR];
 	bindShader(ssrShader);
 	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, scene.frontFaceBuffer.colorTextures[0]);	// position
+	glBindTexture(GL_TEXTURE_2D, renderer.frontFaceBuffer.colorTextures[0]);	// position
 	glActiveTexture(GL_TEXTURE1);
-	glBindTexture(GL_TEXTURE_2D, scene.frontFaceBuffer.colorTextures[1]);	// normal
+	glBindTexture(GL_TEXTURE_2D, renderer.frontFaceBuffer.colorTextures[1]);	// normal
 	glActiveTexture(GL_TEXTURE2);
-	glBindTexture(GL_TEXTURE_2D, scene.frontFaceBuffer.colorTextures[2]);	// color
+	glBindTexture(GL_TEXTURE_2D, renderer.frontFaceBuffer.colorTextures[2]);	// color
 	glActiveTexture(GL_TEXTURE3);
-	glBindTexture(GL_TEXTURE_2D, scene.frontFaceBuffer.depthTexture);		// front face depth
+	glBindTexture(GL_TEXTURE_2D, renderer.frontFaceBuffer.depthTexture);		// front face depth
 	glActiveTexture(GL_TEXTURE4);
-	glBindTexture(GL_TEXTURE_2D, scene.backFaceBuffer.depthTexture);		// back face depth
+	glBindTexture(GL_TEXTURE_2D, renderer.backFaceBuffer.depthTexture);		// back face depth
 
-	glUniform2f(scene.ssr_screenDim, (GLfloat)screenWidth, (GLfloat)screenHeight);
+	glUniform2f(renderer.ssr_screenDim, (GLfloat)screenWidth, (GLfloat)screenHeight);
 
 	mat4 proj = createScaleMatrix(vec3((float)screenWidth, (float)screenHeight, 1.f)) * createModelMatrix(vec3(0.5f, 0.5f, 0.f), quat(), vec3(0.5f, 0.5f, 1.f)) * scene.cam.proj;
 
-	glUniformMatrix4fv(scene.ssr_proj, 1, GL_FALSE, proj.data);
-	glUniformMatrix4fv(scene.ssr_invProj, 1, GL_FALSE, scene.cam.invProj.data);
+	glUniformMatrix4fv(renderer.ssr_proj, 1, GL_FALSE, proj.data);
+	glUniformMatrix4fv(renderer.ssr_invProj, 1, GL_FALSE, scene.cam.invProj.data);
 	
-	glUniform2f(scene.ssr_clippingPlanes, scene.cam.nearPlane, scene.cam.farPlane);
+	glUniform2f(renderer.ssr_clippingPlanes, scene.cam.nearPlane, scene.cam.farPlane);
 
-	bindAndDrawMesh(scene.plane);
+	bindAndDrawMesh(renderer.plane);
+}
+
+void cleanupRenderer(opengl_renderer& renderer)
+{
+	for (uint32 i = 0; i < SHADER_COUNT; ++i)
+		deleteShader(renderer.shaders[i]);
+	deleteFBO(renderer.frontFaceBuffer);
+	deleteFBO(renderer.backFaceBuffer);
 }
 
 void cleanupScene(scene_state& scene)
 {
-	for (uint32 i = 0; i < SHADER_COUNT; ++i)
-		deleteShader(scene.shaders[i]);
-
 	for (opengl_mesh& mesh : scene.staticGeometry)
 		deleteMesh(mesh);
-
-	deleteFBO(scene.frontFaceBuffer);
-	deleteFBO(scene.backFaceBuffer);
+	for (material& mat : scene.staticGeometryMaterials)
+	{
+		deleteTexture(mat.diffuseTexture);
+		deleteTexture(mat.normalTexture);
+	}
 }

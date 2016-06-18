@@ -247,6 +247,9 @@ int main(int argc, char* argv[])
 
 	ShowWindow(windowHandle, SW_SHOW);
 
+	opengl_renderer renderer;
+	initializeRenderer(renderer, clientWidth, clientHeight);
+
 	scene_state scenes[SCENE_COUNT];
 	for (uint32 i = 0; i < SCENE_COUNT; ++i)
 		initializeScene(scenes[i], (scene_name)i, clientWidth, clientHeight);
@@ -291,11 +294,10 @@ int main(int argc, char* argv[])
 
 		{	//TIMED_BLOCK("messages")
 			processPendingMessages(clientWidth, clientHeight, *lastInput, *curInput);
-			for (uint32 i = 0; i < 9; ++i)
+			for (uint32 i = 0; i < SCENE_COUNT; ++i)
 			{
 				if (buttonDownEvent(*curInput, (kb_button)(KB_1 + i)))
 				{
-					std::cout << i << std::endl;
 					currentScene = i;
 				}
 			}
@@ -303,7 +305,7 @@ int main(int argc, char* argv[])
 
 		{	//TIMED_BLOCK("update and render")
 			updateScene(scenes[currentScene], *curInput, secondsElapsed);
-			renderScene(scenes[currentScene], clientWidth, clientHeight);
+			renderScene(renderer, scenes[currentScene], clientWidth, clientHeight);
 		}
 
 		{	//TIMED_BLOCK("rest")
@@ -325,6 +327,8 @@ int main(int argc, char* argv[])
 
 	for (uint32 i = 0; i < SCENE_COUNT; ++i)
 		cleanupScene(scenes[i]);
+
+	cleanupRenderer(renderer);
 }
 
 uint64 getFileWriteTime(const char* filename)
