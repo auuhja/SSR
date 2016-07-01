@@ -580,6 +580,17 @@ static bool loadAllShaders(opengl_renderer& renderer)
 {
 	bool reloaded = false;
 	{
+		opengl_shader& shader = renderer.shaders[SHADER_GEOMETRY];
+		if (loadShader(shader, "geometry_shader.glsl"))
+		{
+			bindShader(shader);
+			renderer.geometry_MVP = glGetUniformLocation(shader.programID, "MVP");
+			renderer.geometry_MV = glGetUniformLocation(shader.programID, "MV");
+
+			reloaded = true;
+		}
+	}
+	{
 		opengl_shader& shader = renderer.shaders[SHADER_MATERIAL];
 		if (loadShader(shader, "material_shader.glsl"))
 		{
@@ -644,6 +655,7 @@ void initializeRenderer(opengl_renderer& renderer, uint32 screenWidth, uint32 sc
 	}
 
 	loadMesh(renderer.plane, "plane.obj");
+	loadMesh(renderer.sphere, "sphere.obj");
 
 	glClearColor(0.18f, 0.35f, 0.5f, 1.0f);
 	glEnable(GL_CULL_FACE);
@@ -651,8 +663,11 @@ void initializeRenderer(opengl_renderer& renderer, uint32 screenWidth, uint32 sc
 	glEnable(GL_DEPTH_TEST);
 }
 
+static bool renderSphere;
+
 void initializeScene(scene_state& scene, scene_name name, uint32 screenWidth, uint32 screenHeight)
 {
+	renderSphere = true;
 	// meshes
 	if (name == SCENE_HALLWAY)
 	{
@@ -726,6 +741,11 @@ void updateScene(scene_state& scene, raw_input& input, float dt)
 	scene.cam.position += (rotation * positionChange) * movementSpeed * dt;
 
 	scene.cam.view = createViewMatrix(scene.cam.position, scene.cam.pitch, scene.cam.yaw);
+
+	if (buttonDownEvent(input.keyboard.buttons[KB_R]))
+	{
+		renderSphere = !renderSphere;
+	}
 }
 
 static void renderGeometry(opengl_renderer& renderer, scene_state& scene)
@@ -770,20 +790,19 @@ static void renderGeometry(opengl_renderer& renderer, scene_state& scene)
 		bindAndDrawMesh(scene.staticGeometry[i]);
 	}
 
-	// draw spheres at light positions
-	/*bindShader(geometryShader);
-	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, scene.textures[TEXTURE_GROUND].textureID);
-	for (uint32 i = 0; i < min(scene.pointLights.size(), MAX_POINT_LIGHTS); ++i)
+	if (renderSphere)
 	{
-	vec3 pos = scene.pointLights[i].position;
-	mat4 MV = scene.cam.view * createModelMatrix(pos, quat(), 2.f);
-	mat4 MVP = scene.cam.proj * MV;
-	glUniformMatrix4fv(scene.material_MV, 1, GL_FALSE, MV.data);
-	glUniformMatrix4fv(scene.material_MVP, 1, GL_FALSE, MVP.data);
+		opengl_shader& geometryShader = renderer.shaders[SHADER_GEOMETRY];
+		bindShader(geometryShader);
 
-	bindAndDrawMesh(scene.meshes[MESH_SPHERE]);
-	}*/
+		vec3 pos(-20, 2, 0);
+		mat4 MV = scene.cam.view * createModelMatrix(pos, quat(), 2.f);
+		mat4 MVP = scene.cam.proj * MV;
+		glUniformMatrix4fv(renderer.geometry_MV, 1, GL_FALSE, MV.data);
+		glUniformMatrix4fv(renderer.geometry_MVP, 1, GL_FALSE, MVP.data);
+
+		bindAndDrawMesh(renderer.sphere);
+	}
 }
 
 void renderScene(opengl_renderer& renderer, scene_state& scene, uint32 screenWidth, uint32 screenHeight)

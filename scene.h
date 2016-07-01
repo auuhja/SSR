@@ -118,10 +118,13 @@ struct opengl_renderer
 	opengl_fbo backFaceBuffer;
 
 	opengl_mesh plane;
+	opengl_mesh sphere;
 
 	opengl_shader shaders[SHADER_COUNT];
 
 	// shader uniforms
+	GLuint geometry_MVP, geometry_MV;
+
 	GLuint material_MVP, material_MV, material_numberOfPointLights, material_ambient, material_diffuse, material_specular, material_shininess;
 	GLuint material_hasDiffuseTexture;
 	GLuint material_pl_position[MAX_POINT_LIGHTS], material_pl_radius[MAX_POINT_LIGHTS], material_pl_color[MAX_POINT_LIGHTS];
