@@ -78,7 +78,6 @@ struct opengl_fbo
 enum shader_type
 {
 	SHADER_GEOMETRY,
-	SHADER_MATERIAL,
 	SHADER_SSR,
 
 	SHADER_COUNT,
@@ -123,11 +122,10 @@ struct opengl_renderer
 	opengl_shader shaders[SHADER_COUNT];
 
 	// shader uniforms
-	GLuint geometry_MVP, geometry_MV;
+	GLuint geometry_MVP, geometry_MV, geometry_ambient, geometry_diffuse, geometry_specular, geometry_shininess;
+	GLuint geometry_hasDiffuseTexture, geometry_hasNormalTexture;
 
-	GLuint material_MVP, material_MV, material_numberOfPointLights, material_ambient, material_diffuse, material_specular, material_shininess;
-	GLuint material_hasDiffuseTexture;
-	GLuint material_pl_position[MAX_POINT_LIGHTS], material_pl_radius[MAX_POINT_LIGHTS], material_pl_color[MAX_POINT_LIGHTS];
+	GLuint geometry_numberOfPointLights, geometry_pl_position[MAX_POINT_LIGHTS], geometry_pl_color[MAX_POINT_LIGHTS], geometry_pl_radius[MAX_POINT_LIGHTS];
 
 	GLuint ssr_screenDim, ssr_proj, ssr_invProj, ssr_clippingPlanes;
 };

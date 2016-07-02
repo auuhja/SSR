@@ -29,7 +29,6 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="res\shaders\geometry_shader.glsl" />
-    <None Include="res\shaders\material_shader.glsl" />
     <None Include="res\shaders\ssr_shader.glsl" />
   </ItemGroup>
   <PropertyGroup Label="Globals">

@@ -37,13 +37,10 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <None Include="res\shaders\geometry_shader.glsl">
-      <Filter>shaders</Filter>
-    </None>
     <None Include="res\shaders\ssr_shader.glsl">
       <Filter>shaders</Filter>
     </None>
-    <None Include="res\shaders\material_shader.glsl">
+    <None Include="res\shaders\geometry_shader.glsl">
       <Filter>shaders</Filter>
     </None>
   </ItemGroup>
