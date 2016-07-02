@@ -77,7 +77,8 @@ uniform int numberOfPointLights;
 
 layout (location = 0) out vec3 out_position;
 layout (location = 1) out vec3 out_normal;
-layout (location = 2) out vec4 out_color;
+layout (location = 2) out vec3 out_color;
+layout (location = 3) out float out_shininess;
 
 
 void main()
@@ -125,6 +126,6 @@ void main()
 	
 	out_position.xyz = position;
 	out_normal.xyz = N;
-	out_color.rgb = diffuseColor + ambientColor + specularColor;
-	out_color.a = shininess; // TODO: scale this
+	out_color = diffuseColor + ambientColor + specularColor;
+	out_shininess = shininess;
 }

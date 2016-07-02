@@ -28,7 +28,7 @@ struct camera
 	float farPlane;
 	mat4 view;
 	mat4 proj;
-	mat4 invProj;
+	mat4 toPrevFramePos;
 };
 
 struct point_light
@@ -109,12 +109,16 @@ struct scene_state
 	std::vector<point_light> pointLights;
 };
 
+// pipeline: 
+
 struct opengl_renderer
 {
 	uint32 width, height;
 
-	opengl_fbo frontFaceBuffer;
-	opengl_fbo backFaceBuffer;
+	opengl_fbo frontFaceBuffer;		// positions, normals, colors, depth
+	opengl_fbo backFaceBuffer;		// backface depth
+	opengl_fbo lastFrameBuffer;		// color info of prev frame
+	opengl_fbo reflectionBuffer;	// reflection color, reflection mask
 
 	opengl_mesh plane;
 	opengl_mesh sphere;
@@ -127,7 +131,7 @@ struct opengl_renderer
 
 	GLuint geometry_numberOfPointLights, geometry_pl_position[MAX_POINT_LIGHTS], geometry_pl_color[MAX_POINT_LIGHTS], geometry_pl_radius[MAX_POINT_LIGHTS];
 
-	GLuint ssr_screenDim, ssr_proj, ssr_invProj, ssr_clippingPlanes;
+	GLuint ssr_screenDim, ssr_proj, ssr_toPrevFramePos, ssr_clippingPlanes;
 };
 
 enum kb_button
@@ -254,7 +258,7 @@ void initializeRenderer(opengl_renderer& renderer, uint32 screenWidth, uint32 sc
 void initializeScene(scene_state& scene, scene_name name, uint32 screenWidth, uint32 screenHeight);
 
 void updateScene(scene_state& scene, raw_input& input, float dt);
-void renderScene(opengl_renderer& renderer, scene_state& scene, uint32 screenWidth, uint32 screenHeight);
+void renderScene(opengl_renderer& renderer, scene_state& scene, uint32 screenWidth, uint32 screenHeight, bool debugRendering = false);
 
 void cleanupRenderer(opengl_renderer& renderer);
 void cleanupScene(scene_state& scene);

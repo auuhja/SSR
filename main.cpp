@@ -11,6 +11,7 @@ static uint32 clientWidth;
 static uint32 clientHeight;
 static bool running;
 static uint32 currentScene = SCENE_HALLWAY;
+static bool debugRendering;
 
 timer globalTimer;
 
@@ -268,6 +269,7 @@ int main(int argc, char* argv[])
 	QueryPerformanceCounter(&lastTime);
 	float secondsElapsed = 1.f / 60.f;
 
+	debugRendering = false;
 	running = true;
 	while (running)
 	{
@@ -301,11 +303,16 @@ int main(int argc, char* argv[])
 					currentScene = i;
 				}
 			}
+
+			if (buttonDownEvent(*curInput, KB_SPACE))
+			{
+				debugRendering = !debugRendering;
+			}
 		}
 
 		{	//TIMED_BLOCK("update and render")
 			updateScene(scenes[currentScene], *curInput, secondsElapsed);
-			renderScene(renderer, scenes[currentScene], clientWidth, clientHeight);
+			renderScene(renderer, scenes[currentScene], clientWidth, clientHeight, debugRendering);
 		}
 
 		{	//TIMED_BLOCK("rest")

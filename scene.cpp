@@ -625,28 +625,90 @@ static inline void bindDefaultFramebuffer(uint32 width, uint32 height)
 	glViewport(0, 0, width, height);
 }
 
-static bool initializeFBOs(opengl_fbo& frontFaceBuffer, opengl_fbo& backFaceBuffer, uint32 width, uint32 height)
+static bool initializeFBOs(opengl_renderer& renderer)
 {
-	createFBO(frontFaceBuffer, width, height);
-	attachColorAttachment(frontFaceBuffer, GL_RGB32F, GL_FLOAT);		// positions
-	attachColorAttachment(frontFaceBuffer, GL_RGB16F, GL_FLOAT);		// normals
-	attachColorAttachment(frontFaceBuffer, GL_RGBA8, GL_UNSIGNED_BYTE); // color
-	attachDepthAttachment(frontFaceBuffer);
-	bool frontFaceBufferSucess = finishFBO(frontFaceBuffer);
+	createFBO(renderer.frontFaceBuffer, renderer.width, renderer.height);
+	attachColorAttachment(renderer.frontFaceBuffer, GL_RGB32F, GL_FLOAT);		// positions
+	attachColorAttachment(renderer.frontFaceBuffer, GL_RGB16F, GL_FLOAT);		// normals
+	attachColorAttachment(renderer.frontFaceBuffer, GL_RGB8, GL_UNSIGNED_BYTE);	// color
+	attachColorAttachment(renderer.frontFaceBuffer, GL_R16F, GL_FLOAT);			// shininess
+	attachDepthAttachment(renderer.frontFaceBuffer);
+	bool frontFaceBufferSucess = finishFBO(renderer.frontFaceBuffer);
 
-	createFBO(backFaceBuffer, width / 4, height / 4);
-	attachDepthAttachment(backFaceBuffer);
-	bool backFaceBufferSuccess = finishFBO(backFaceBuffer);
+	createFBO(renderer.backFaceBuffer, renderer.width / 4, renderer.height / 4);
+	attachDepthAttachment(renderer.backFaceBuffer);
+	bool backFaceBufferSuccess = finishFBO(renderer.backFaceBuffer);
 
-	bindDefaultFramebuffer(width, height);
+	createFBO(renderer.reflectionBuffer, renderer.width, renderer.height);
+	attachColorAttachment(renderer.reflectionBuffer, GL_RGBA, GL_UNSIGNED_BYTE);
+	bool reflectionBufferSuccess = finishFBO(renderer.reflectionBuffer);
 
-	return frontFaceBufferSucess && backFaceBufferSuccess;
+	createFBO(renderer.lastFrameBuffer, renderer.width, renderer.height);
+	attachColorAttachment(renderer.lastFrameBuffer, GL_RGBA8, GL_UNSIGNED_BYTE);
+	bool lastFrameBufferSuccess = finishFBO(renderer.lastFrameBuffer);
+
+	bindDefaultFramebuffer(renderer.width, renderer.height);
+
+	return frontFaceBufferSucess && backFaceBufferSuccess && reflectionBufferSuccess && lastFrameBufferSuccess;
+}
+
+static void blitFrameBuffer(opengl_fbo& from, uint32 fromIndex, opengl_fbo& to, uint32 toIndex)
+{
+	glBindFramebuffer(GL_READ_FRAMEBUFFER, from.fbo);
+	glReadBuffer(GL_COLOR_ATTACHMENT0 + fromIndex);
+
+	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, to.fbo);
+	glDrawBuffer(GL_COLOR_ATTACHMENT0 + toIndex);
+
+	glBlitFramebuffer(0, 0, from.width, from.height,
+		0, 0, to.width, to.height,
+		GL_COLOR_BUFFER_BIT, GL_NEAREST);
+}
+
+static void blitFrameBuffer(opengl_fbo& from, uint32 fromIndex, opengl_fbo& to, uint32 toIndex, 
+	uint32 topLeftX, uint32 topLeftY, uint32 bottomRightX, uint32 bottomRightY)
+{
+	glBindFramebuffer(GL_READ_FRAMEBUFFER, from.fbo);
+	glReadBuffer(GL_COLOR_ATTACHMENT0 + fromIndex);
+
+	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, to.fbo);
+	glDrawBuffer(GL_COLOR_ATTACHMENT0 + toIndex);
+
+	glBlitFramebuffer(0, 0, from.width, from.height,
+		topLeftX, topLeftY, bottomRightX, bottomRightY,
+		GL_COLOR_BUFFER_BIT, GL_NEAREST);
+}
+
+static void blitFrameBufferToDefault(opengl_fbo& from, uint32 fromIndex, uint32 width, uint32 height)
+{
+	glBindFramebuffer(GL_READ_FRAMEBUFFER, from.fbo);
+	glReadBuffer(GL_COLOR_ATTACHMENT0 + fromIndex);
+
+	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+	glDrawBuffer(GL_COLOR_ATTACHMENT0);
+
+	glBlitFramebuffer(0, 0, from.width, from.height,
+		0, 0, width, height,
+		GL_COLOR_BUFFER_BIT, GL_NEAREST);
+}
+
+static void blitFrameBufferToDefault(opengl_fbo& from, uint32 fromIndex, 
+	uint32 topLeftX, uint32 topLeftY, uint32 bottomRightX, uint32 bottomRightY)
+{
+	glBindFramebuffer(GL_READ_FRAMEBUFFER, from.fbo);
+	glReadBuffer(GL_COLOR_ATTACHMENT0 + fromIndex);
+
+	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+	glDrawBuffer(GL_COLOR_ATTACHMENT0);
+
+	glBlitFramebuffer(0, 0, from.width, from.height,
+		topLeftX, topLeftY, bottomRightX, bottomRightY,
+		GL_COLOR_BUFFER_BIT, GL_NEAREST);
 }
 
 static bool loadAllShaders(opengl_renderer& renderer)
 {
 	bool reloaded = false;
-	
 	{
 		opengl_shader& shader = renderer.shaders[SHADER_GEOMETRY];
 		if (loadShader(shader, "geometry_shader.glsl"))
@@ -683,14 +745,15 @@ static bool loadAllShaders(opengl_renderer& renderer)
 			bindShader(shader);
 			renderer.ssr_screenDim = glGetUniformLocation(shader.programID, "screenDim");
 			renderer.ssr_proj = glGetUniformLocation(shader.programID, "proj");
-			renderer.ssr_invProj = glGetUniformLocation(shader.programID, "invProj");
+			renderer.ssr_toPrevFramePos = glGetUniformLocation(shader.programID, "toPrevFramePos");
 			renderer.ssr_clippingPlanes = glGetUniformLocation(shader.programID, "clippingPlanes");
 			
 			glUniform1i(glGetUniformLocation(shader.programID, "positionTexture"), 0);
 			glUniform1i(glGetUniformLocation(shader.programID, "normalTexture"), 1);
-			glUniform1i(glGetUniformLocation(shader.programID, "colorTexture"), 2);
-			glUniform1i(glGetUniformLocation(shader.programID, "depthTexture"), 3);
-			glUniform1i(glGetUniformLocation(shader.programID, "backfaceDepthTexture"), 4);
+			glUniform1i(glGetUniformLocation(shader.programID, "lastFrameColorTexture"), 2);
+			glUniform1i(glGetUniformLocation(shader.programID, "shininessTexture"), 3);
+			glUniform1i(glGetUniformLocation(shader.programID, "depthTexture"), 4);
+			glUniform1i(glGetUniformLocation(shader.programID, "backfaceDepthTexture"), 5);
 
 			reloaded = true;
 		}
@@ -701,10 +764,14 @@ static bool loadAllShaders(opengl_renderer& renderer)
 
 void initializeRenderer(opengl_renderer& renderer, uint32 screenWidth, uint32 screenHeight)
 {
-	initializeFBOs(renderer.frontFaceBuffer, renderer.backFaceBuffer, screenWidth, screenHeight);
-
 	renderer.width = screenWidth;
 	renderer.height = screenHeight;
+
+	bool fboSuccess = initializeFBOs(renderer);
+	if (!fboSuccess)
+	{
+		std::cout << "initializing FBOs failed!" << std::endl;
+	}
 	
 	// shaders
 	{
@@ -722,11 +789,8 @@ void initializeRenderer(opengl_renderer& renderer, uint32 screenWidth, uint32 sc
 	glEnable(GL_DEPTH_TEST);
 }
 
-static bool renderSphere;
-
 void initializeScene(scene_state& scene, scene_name name, uint32 screenWidth, uint32 screenHeight)
 {
-	renderSphere = true;
 	// meshes
 	if (name == SCENE_HALLWAY)
 	{
@@ -769,14 +833,14 @@ void initializeScene(scene_state& scene, scene_name name, uint32 screenWidth, ui
 		scene.cam.height = screenHeight;
 		float aspect = (float)screenWidth / (float)screenHeight;
 		scene.cam.proj = createProjectionMatrix(scene.cam.verticalFOV, aspect, scene.cam.nearPlane, scene.cam.farPlane);
-		scene.cam.invProj = inverted(scene.cam.proj);
 		scene.cam.view = createViewMatrix(scene.cam.position, scene.cam.pitch, scene.cam.yaw);
+		scene.cam.toPrevFramePos = scene.cam.proj;
 	}
 }
 
 void updateScene(scene_state& scene, raw_input& input, float dt)
 {
-	//scene.entities[0].transform.rotation = quat(vec3(0, 1, 0), 0.001f) * scene.entities[0].transform.rotation;
+	mat4 prevView = scene.cam.view;
 
 	if (buttonDownEvent(input, KB_ESC))
 		exit(0);
@@ -800,11 +864,7 @@ void updateScene(scene_state& scene, raw_input& input, float dt)
 	scene.cam.position += (rotation * positionChange) * movementSpeed * dt;
 
 	scene.cam.view = createViewMatrix(scene.cam.position, scene.cam.pitch, scene.cam.yaw);
-
-	if (buttonDownEvent(input.keyboard.buttons[KB_R]))
-	{
-		renderSphere = !renderSphere;
-	}
+	scene.cam.toPrevFramePos = scene.cam.proj * prevView * inverted(scene.cam.view); // I think this only works with static geometry!
 }
 
 static void renderGeometry(opengl_renderer& renderer, scene_state& scene)
@@ -876,17 +936,17 @@ static void renderGeometry(opengl_renderer& renderer, scene_state& scene)
 	}*/
 }
 
-void renderScene(opengl_renderer& renderer, scene_state& scene, uint32 screenWidth, uint32 screenHeight)
+void renderScene(opengl_renderer& renderer, scene_state& scene, uint32 screenWidth, uint32 screenHeight, bool debugRendering)
 {
 	loadAllShaders(renderer);
 
 	if (screenWidth != renderer.width || screenHeight != renderer.height)
 	{
-		deleteFBO(renderer.frontFaceBuffer);
-		deleteFBO(renderer.backFaceBuffer);
-		initializeFBOs(renderer.frontFaceBuffer, renderer.backFaceBuffer, screenWidth, screenHeight);
 		renderer.width = screenWidth;
 		renderer.height = screenHeight;
+		deleteFBO(renderer.frontFaceBuffer);
+		deleteFBO(renderer.backFaceBuffer);
+		initializeFBOs(renderer);
 	}
 
 	if (screenWidth != scene.cam.width || screenHeight != scene.cam.height)
@@ -895,7 +955,7 @@ void renderScene(opengl_renderer& renderer, scene_state& scene, uint32 screenWid
 		scene.cam.height = screenHeight;
 		float aspect = (float)screenWidth / (float)screenHeight;
 		scene.cam.proj = createProjectionMatrix(scene.cam.verticalFOV, aspect, scene.cam.nearPlane, scene.cam.farPlane);
-		scene.cam.invProj = inverted(scene.cam.proj);
+		scene.cam.toPrevFramePos = scene.cam.proj;
 		std::cout << "resize" << std::endl;
 	}
 
@@ -911,10 +971,8 @@ void renderScene(opengl_renderer& renderer, scene_state& scene, uint32 screenWid
 	renderGeometry(renderer, scene);
 	glCullFace(GL_BACK);
 	
-
-
 	// ssr
-	bindDefaultFramebuffer(screenWidth, screenHeight);
+	bindFramebuffer(renderer.reflectionBuffer);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	opengl_shader& ssrShader = renderer.shaders[SHADER_SSR];
@@ -924,22 +982,30 @@ void renderScene(opengl_renderer& renderer, scene_state& scene, uint32 screenWid
 	glActiveTexture(GL_TEXTURE1);
 	glBindTexture(GL_TEXTURE_2D, renderer.frontFaceBuffer.colorTextures[1]);	// normal
 	glActiveTexture(GL_TEXTURE2);
-	glBindTexture(GL_TEXTURE_2D, renderer.frontFaceBuffer.colorTextures[2]);	// color
+	glBindTexture(GL_TEXTURE_2D, renderer.lastFrameBuffer.colorTextures[0]);	// color TODO: prev frame
 	glActiveTexture(GL_TEXTURE3);
-	glBindTexture(GL_TEXTURE_2D, renderer.frontFaceBuffer.depthTexture);		// front face depth
+	glBindTexture(GL_TEXTURE_2D, renderer.frontFaceBuffer.colorTextures[3]);	// shininess
 	glActiveTexture(GL_TEXTURE4);
-	glBindTexture(GL_TEXTURE_2D, renderer.backFaceBuffer.depthTexture);		// back face depth
+	glBindTexture(GL_TEXTURE_2D, renderer.frontFaceBuffer.depthTexture);		// front face depth
+	glActiveTexture(GL_TEXTURE5);
+	glBindTexture(GL_TEXTURE_2D, renderer.backFaceBuffer.depthTexture);			// back face depth
 
 	glUniform2f(renderer.ssr_screenDim, (GLfloat)screenWidth, (GLfloat)screenHeight);
 
 	mat4 proj = createScaleMatrix(vec3((float)screenWidth, (float)screenHeight, 1.f)) * createModelMatrix(vec3(0.5f, 0.5f, 0.f), quat(), vec3(0.5f, 0.5f, 1.f)) * scene.cam.proj;
 
 	glUniformMatrix4fv(renderer.ssr_proj, 1, GL_FALSE, proj.data);
-	glUniformMatrix4fv(renderer.ssr_invProj, 1, GL_FALSE, scene.cam.invProj.data);
+	glUniformMatrix4fv(renderer.ssr_toPrevFramePos, 1, GL_FALSE, scene.cam.toPrevFramePos.data);
 	
 	glUniform2f(renderer.ssr_clippingPlanes, scene.cam.nearPlane, scene.cam.farPlane);
 
 	bindAndDrawMesh(renderer.plane);
+
+	// save this frame
+	blitFrameBuffer(renderer.frontFaceBuffer, 2, renderer.lastFrameBuffer, 0);
+
+	// debug
+	blitFrameBufferToDefault(renderer.reflectionBuffer, 0, renderer.width, renderer.height);
 }
 
 void cleanupRenderer(opengl_renderer& renderer)

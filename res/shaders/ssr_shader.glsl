@@ -19,9 +19,11 @@ void main()
 
 in vec2 texCoords;
 
-uniform sampler2D positionTexture;
-uniform sampler2D normalTexture;
-uniform sampler2D colorTexture;
+uniform sampler2D positionTexture; // current frame
+uniform sampler2D normalTexture; // current frame
+
+uniform sampler2D lastFrameColorTexture;
+uniform sampler2D shininessTexture;
 
 uniform sampler2D depthTexture;
 uniform sampler2D backfaceDepthTexture;
@@ -29,11 +31,11 @@ uniform sampler2D backfaceDepthTexture;
 uniform vec2 screenDim;
 
 uniform mat4 proj;		// eye space to screen coordinates (NOT NDC)
-uniform mat4 invProj;	// NDC to eye space
+uniform mat4 toPrevFramePos; // pixel pos from last frame
 
 uniform vec2 clippingPlanes;
 
-layout (location = 0) out vec4 fragColor;
+layout (location = 0) out vec4 out_reflectedColor;
 
 
 void swap(inout float a, inout float b) 
@@ -232,27 +234,21 @@ float calculateAlphaForIntersection(float iterationCount, float specularStrength
 
 void main()
 {
-	vec3 color = texture2D(colorTexture, texCoords).rgb;
 	vec3 position = texture2D(positionTexture, texCoords).xyz;
 	vec3 normal = normalize(texture2D(normalTexture, texCoords).xyz);
-	float shininess = texture2D(colorTexture, texCoords).a;
+	float shininess = texture2D(shininessTexture, texCoords).x;
 	
 	gl_FragDepth = texture2D(depthTexture, texCoords).x;
-	fragColor = vec4(color, 1.0);
-
-#if 1
-	float depth = linear01(texture2D(depthTexture, texCoords).x, clippingPlanes.x, clippingPlanes.y);
+	out_reflectedColor = vec4(0.0, 0.0, 0.0, 1.0);
 	
-
-
 	vec3 viewDir = normalize(position);
 	vec3 rayDirection = normalize(reflect(viewDir, normal));
 	vec3 rayOrigin = position;
 
+	// parameters for ray tracing
 	float maxRayTraceDistance = 100;
 	float stride = 10;
 	float strideZCutoff = 1000;
-	//float jitter = 0.1;
 	float pixelZSize = 1;
 	float iterations = 60;
 	float binarySearchIterations = 10;
@@ -273,21 +269,21 @@ void main()
 
 	if (result)
 	{
-		float specularStrength = shininess/3; // TODO: parameter
+		float specularStrength = shininess; // TODO: parameter
 		float screenEdgeFadeStart = 0.75;
 		float eyeFadeStart = -10;
 		float eyeFadeEnd = 10;
 
 		float alpha = calculateAlphaForIntersection(iterationsNeeded, specularStrength, hitPixel, hitPoint, rayOrigin, rayDirection, iterations,
 			screenEdgeFadeStart, eyeFadeStart, eyeFadeEnd, maxRayTraceDistance);
-		//alpha = 1;
 
-		vec2 tex = vec2(hitPixel.x / screenDim.x, hitPixel.y / screenDim.y);
-		fragColor = mix(vec4(color, 1.0), texture2D(colorTexture, hitPixel), alpha);
-	
+		vec4 prevFramePos = toPrevFramePos * vec4(hitPoint, 1.0);
+		prevFramePos.xyz = prevFramePos.xyz / prevFramePos.w;
+
+		vec2 tex = prevFramePos.xy * 0.5 + vec2(0.5);
+
+		out_reflectedColor = vec4(texture2D(lastFrameColorTexture, tex).rgb, alpha);
 	}
-
-#endif
 }
 
 
