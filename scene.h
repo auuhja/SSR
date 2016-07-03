@@ -79,6 +79,7 @@ enum shader_type
 {
 	SHADER_GEOMETRY,
 	SHADER_SSR,
+	SHADER_RESULT,
 
 	SHADER_COUNT,
 };
@@ -108,8 +109,6 @@ struct scene_state
 
 	std::vector<point_light> pointLights;
 };
-
-// pipeline: 
 
 struct opengl_renderer
 {

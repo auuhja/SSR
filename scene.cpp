@@ -679,7 +679,7 @@ static void blitFrameBuffer(opengl_fbo& from, uint32 fromIndex, opengl_fbo& to, 
 		GL_COLOR_BUFFER_BIT, GL_NEAREST);
 }
 
-static void blitFrameBufferToDefault(opengl_fbo& from, uint32 fromIndex, uint32 width, uint32 height)
+static void blitFrameBufferToScreen(opengl_fbo& from, uint32 fromIndex, uint32 width, uint32 height)
 {
 	glBindFramebuffer(GL_READ_FRAMEBUFFER, from.fbo);
 	glReadBuffer(GL_COLOR_ATTACHMENT0 + fromIndex);
@@ -692,7 +692,7 @@ static void blitFrameBufferToDefault(opengl_fbo& from, uint32 fromIndex, uint32 
 		GL_COLOR_BUFFER_BIT, GL_NEAREST);
 }
 
-static void blitFrameBufferToDefault(opengl_fbo& from, uint32 fromIndex, 
+static void blitFrameBufferToScreen(opengl_fbo& from, uint32 fromIndex, 
 	uint32 topLeftX, uint32 topLeftY, uint32 bottomRightX, uint32 bottomRightY)
 {
 	glBindFramebuffer(GL_READ_FRAMEBUFFER, from.fbo);
@@ -754,6 +754,18 @@ static bool loadAllShaders(opengl_renderer& renderer)
 			glUniform1i(glGetUniformLocation(shader.programID, "shininessTexture"), 3);
 			glUniform1i(glGetUniformLocation(shader.programID, "depthTexture"), 4);
 			glUniform1i(glGetUniformLocation(shader.programID, "backfaceDepthTexture"), 5);
+
+			reloaded = true;
+		}
+	}
+	{
+		opengl_shader& shader = renderer.shaders[SHADER_RESULT];
+		if (loadShader(shader, "result_shader.glsl"))
+		{
+			bindShader(shader);
+
+			glUniform1i(glGetUniformLocation(shader.programID, "colorTexture"), 0);
+			glUniform1i(glGetUniformLocation(shader.programID, "reflectionTexture"), 1);
 
 			reloaded = true;
 		}
@@ -982,7 +994,7 @@ void renderScene(opengl_renderer& renderer, scene_state& scene, uint32 screenWid
 	glActiveTexture(GL_TEXTURE1);
 	glBindTexture(GL_TEXTURE_2D, renderer.frontFaceBuffer.colorTextures[1]);	// normal
 	glActiveTexture(GL_TEXTURE2);
-	glBindTexture(GL_TEXTURE_2D, renderer.lastFrameBuffer.colorTextures[0]);	// color TODO: prev frame
+	glBindTexture(GL_TEXTURE_2D, renderer.lastFrameBuffer.colorTextures[0]);	// prev frame
 	glActiveTexture(GL_TEXTURE3);
 	glBindTexture(GL_TEXTURE_2D, renderer.frontFaceBuffer.colorTextures[3]);	// shininess
 	glActiveTexture(GL_TEXTURE4);
@@ -1001,11 +1013,21 @@ void renderScene(opengl_renderer& renderer, scene_state& scene, uint32 screenWid
 
 	bindAndDrawMesh(renderer.plane);
 
-	// save this frame
-	blitFrameBuffer(renderer.frontFaceBuffer, 2, renderer.lastFrameBuffer, 0);
+	// bring it together - save for next frame
+	bindFramebuffer(renderer.lastFrameBuffer);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	// debug
-	blitFrameBufferToDefault(renderer.reflectionBuffer, 0, renderer.width, renderer.height);
+	opengl_shader& resultShader = renderer.shaders[SHADER_RESULT];
+	bindShader(resultShader);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, renderer.frontFaceBuffer.colorTextures[2]);	// color
+	glActiveTexture(GL_TEXTURE1);
+	glBindTexture(GL_TEXTURE_2D, renderer.reflectionBuffer.colorTextures[0]);	// reflected color
+
+	bindAndDrawMesh(renderer.plane);
+
+	// blit to screen
+	blitFrameBufferToScreen(renderer.lastFrameBuffer, 0, screenWidth, screenHeight);
 }
 
 void cleanupRenderer(opengl_renderer& renderer)

@@ -9,7 +9,7 @@ out vec2 texCoords;
 void main()
 {
 	texCoords = in_texCoords;
-	gl_Position = vec4(in_position, 1.f);
+	gl_Position = vec4(in_position, 1.0);
 }
 
 
@@ -239,7 +239,7 @@ void main()
 	float shininess = texture2D(shininessTexture, texCoords).x;
 	
 	gl_FragDepth = texture2D(depthTexture, texCoords).x;
-	out_reflectedColor = vec4(0.0, 0.0, 0.0, 1.0);
+	out_reflectedColor = vec4(0.0, 0.0, 0.0, 0.0);
 	
 	vec3 viewDir = normalize(position);
 	vec3 rayDirection = normalize(reflect(viewDir, normal));
@@ -269,7 +269,7 @@ void main()
 
 	if (result)
 	{
-		float specularStrength = shininess; // TODO: parameter
+		float specularStrength = 0.8; // TODO: parameter
 		float screenEdgeFadeStart = 0.75;
 		float eyeFadeStart = -10;
 		float eyeFadeEnd = 10;

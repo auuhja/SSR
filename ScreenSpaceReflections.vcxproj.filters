@@ -43,5 +43,8 @@
     <None Include="res\shaders\geometry_shader.glsl">
       <Filter>shaders</Filter>
     </None>
+    <None Include="res\shaders\result_shader.glsl">
+      <Filter>shaders</Filter>
+    </None>
   </ItemGroup>
 </Project>
