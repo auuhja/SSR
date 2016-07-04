@@ -142,7 +142,8 @@ static bool loadStaticGeometry(std::vector<opengl_mesh>& meshes, std::vector<mat
 
 		float shininess;
 		mat->Get(AI_MATKEY_SHININESS, shininess);
-		material.shininess = shininess;
+		material.shininess = shininess / 4; // for some reason this has to be divided by 4
+		std::cout << name.C_Str() << " has shininess " << material.shininess << std::endl;
 
 		aiString texPath;
 		if (mat->GetTexture(aiTextureType_DIFFUSE, 0, &texPath) == aiReturn_SUCCESS)
@@ -958,6 +959,8 @@ void renderScene(opengl_renderer& renderer, scene_state& scene, uint32 screenWid
 		renderer.height = screenHeight;
 		deleteFBO(renderer.frontFaceBuffer);
 		deleteFBO(renderer.backFaceBuffer);
+		deleteFBO(renderer.lastFrameBuffer);
+		deleteFBO(renderer.reflectionBuffer);
 		initializeFBOs(renderer);
 	}
 
@@ -1027,7 +1030,19 @@ void renderScene(opengl_renderer& renderer, scene_state& scene, uint32 screenWid
 	bindAndDrawMesh(renderer.plane);
 
 	// blit to screen
-	blitFrameBufferToScreen(renderer.lastFrameBuffer, 0, screenWidth, screenHeight);
+	if (debugRendering)
+	{
+		//bindDefaultFramebuffer(screenWidth, screenHeight);
+		//glClear(GL_COLOR_BUFFER_BIT);
+		blitFrameBufferToScreen(renderer.frontFaceBuffer, 2, 0, screenHeight / 2, screenWidth / 2, screenHeight);			 // top left: image without reflections
+		blitFrameBufferToScreen(renderer.reflectionBuffer, 0, screenWidth / 2, screenHeight / 2, screenWidth, screenHeight); // top right: reflection buffer
+		blitFrameBufferToScreen(renderer.frontFaceBuffer, 3, 0, 0, screenWidth / 2, screenHeight / 2);						 // bottom left: shininess
+	}
+	else
+	{
+		blitFrameBufferToScreen(renderer.lastFrameBuffer, 0, screenWidth, screenHeight);
+	}
+
 }
 
 void cleanupRenderer(opengl_renderer& renderer)
@@ -1036,6 +1051,8 @@ void cleanupRenderer(opengl_renderer& renderer)
 		deleteShader(renderer.shaders[i]);
 	deleteFBO(renderer.frontFaceBuffer);
 	deleteFBO(renderer.backFaceBuffer);
+	deleteFBO(renderer.lastFrameBuffer);
+	deleteFBO(renderer.reflectionBuffer);
 }
 
 void cleanupScene(scene_state& scene)

@@ -55,12 +55,12 @@ float linear01(float depthValue, float n, float f)
 	return (2.0 * n) / (f + n - depthValue * (f - n));
 }
 
-bool rayIntersectsDepthBuffer(float zA, float zB, vec2 uv, float nearPlane, float farPlane, float pixelZSize)
+bool rayIntersectsDepthBuffer(float zA, float zB, vec2 uv, float nearPlane, float farPlane)
 {
 	float depthFrontFace = linear01(texture2D(depthTexture, uv).x, nearPlane, farPlane) * -farPlane;
 	float depthBackFace = texture2D(backfaceDepthTexture, uv).x * -farPlane; // why not linearize?
 
-	return zB <= depthFrontFace && zA >= depthBackFace - pixelZSize;
+	return zB <= depthFrontFace && zA >= depthBackFace;
 }
 
 /*
@@ -70,11 +70,10 @@ bool rayIntersectsDepthBuffer(float zA, float zB, vec2 uv, float nearPlane, floa
 	stride - distance per step (in screenspace)
 	strideZCutoff - from there on stride 1.0
 	jitter
-	pixelZSize - depth of pixel
 */
 
 bool traceScreenSpaceRay(vec3 rayOrigin, vec3 rayDirection, float maxRayDistance, 
-						 float stride, float strideZCutoff, float jitter, float pixelZSize,
+						 float stride, float strideZCutoff, float jitter,
 						 float iterations, float binarySearchIterations,
 						 out vec2 hitPixel, out vec3 hitPoint, out float iterationsNeeded)
 {
@@ -160,7 +159,7 @@ bool traceScreenSpaceRay(vec3 rayOrigin, vec3 rayDirection, float maxRayDistance
 		hitPixel = permute ? pqk.yx : pqk.xy; // hitPixel = P
 		hitPixel *= invScreenDim;
 
-		intersect = rayIntersectsDepthBuffer(zA, zB, hitPixel, nearPlane, farPlane, pixelZSize);
+		intersect = rayIntersectsDepthBuffer(zA, zB, hitPixel, nearPlane, farPlane);
 	}
 
 	// binary search refinement
@@ -190,7 +189,7 @@ bool traceScreenSpaceRay(vec3 rayOrigin, vec3 rayDirection, float maxRayDistance
 			hitPixel *= invScreenDim;
 				        
 			originalStride *= 0.5;
-			stride = rayIntersectsDepthBuffer( zA, zB, hitPixel, nearPlane, farPlane, pixelZSize) ? -originalStride : originalStride;
+			stride = rayIntersectsDepthBuffer( zA, zB, hitPixel, nearPlane, farPlane) ? -originalStride : originalStride;
 		}
 	}
 
@@ -249,8 +248,7 @@ void main()
 	float maxRayTraceDistance = 100;
 	float stride = 10;
 	float strideZCutoff = 1000;
-	float pixelZSize = 1;
-	float iterations = 60;
+	float iterations = 50;
 	float binarySearchIterations = 10;
 
 	vec2 uv2 = texCoords * screenDim;
@@ -263,7 +261,7 @@ void main()
 	float iterationsNeeded;
 
 	bool result = traceScreenSpaceRay(rayOrigin, rayDirection, maxRayTraceDistance, 
-						 stride, strideZCutoff, jitter, pixelZSize,
+						 stride, strideZCutoff, jitter,
 						 iterations, binarySearchIterations,
 						 hitPixel, hitPoint, iterationsNeeded);
 

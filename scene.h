@@ -5,8 +5,8 @@
 
 #include <glew/glew.h>
 #include <gl/GL.h>
+
 #include <vector>
-#include <unordered_map>
 
 enum scene_name
 {
