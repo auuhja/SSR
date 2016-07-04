@@ -88,6 +88,58 @@ static void uploadVertexData(opengl_mesh& mesh, const std::vector<vertex3PTNT>& 
 	glBindVertexArray(0);
 }
 
+static material loadMaterial(aiMaterial* mat)
+{
+	material material = { 0 };
+	aiString name;
+	mat->Get(AI_MATKEY_NAME, name);
+
+	aiColor3D color;
+	mat->Get(AI_MATKEY_COLOR_AMBIENT, color);
+	material.ambient = vec3(color.r, color.g, color.b);
+
+	mat->Get(AI_MATKEY_COLOR_DIFFUSE, color);
+	material.diffuse = vec3(color.r, color.g, color.b);
+
+	mat->Get(AI_MATKEY_COLOR_SPECULAR, color);
+	material.specular = vec3(color.r, color.g, color.b);
+
+	mat->Get(AI_MATKEY_COLOR_EMISSIVE, color);
+	vec3 emissiveColor = vec3(color.r, color.g, color.b);
+	if (sqlength(emissiveColor) > 0.f)
+	{
+		std::cout << name.C_Str() << " is emissive" << std::endl;
+		material.emitting = true;
+	}
+
+	float shininess;
+	mat->Get(AI_MATKEY_SHININESS, shininess);
+	material.shininess = shininess / 4; // for some reason this has to be divided by 4
+	std::cout << name.C_Str() << " has shininess " << material.shininess << std::endl;
+
+	aiString texPath;
+	if (mat->GetTexture(aiTextureType_DIFFUSE, 0, &texPath) == aiReturn_SUCCESS)
+	{
+		std::cout << name.C_Str() << " has diffuse: " << texPath.C_Str() << std::endl;
+		material.hasDiffuseTexture = true;
+		loadTexture(material.diffuseTexture, texPath.C_Str());
+	}
+	if (mat->GetTexture(aiTextureType_HEIGHT, 0, &texPath) == aiReturn_SUCCESS) // why is the normal map in aiTextureType_HEIGHT???
+	{
+		std::cout << name.C_Str() << " has normal: " << texPath.C_Str() << std::endl;
+		material.hasNormalTexture = true;
+		loadTexture(material.normalTexture, texPath.C_Str());
+	}
+	if (mat->GetTexture(aiTextureType_SPECULAR, 0, &texPath) == aiReturn_SUCCESS)
+	{
+		std::cout << name.C_Str() << " has specular: " << texPath.C_Str() << std::endl;
+		material.hasSpecularTexture = true;
+		loadTexture(material.specularTexture, texPath.C_Str());
+	}
+
+	return material;
+}
+
 // this is expected to be already at the desired world position
 static bool loadStaticGeometry(std::vector<opengl_mesh>& meshes, std::vector<material>& materials, const std::string& filename)
 {
@@ -125,39 +177,7 @@ static bool loadStaticGeometry(std::vector<opengl_mesh>& meshes, std::vector<mat
 		}
 
 		// material
-		material material = { 0 };
-		aiMaterial* mat = aiScene->mMaterials[aiMesh->mMaterialIndex];
-		aiString name;
-		mat->Get(AI_MATKEY_NAME, name);
-
-		aiColor3D color;
-		mat->Get(AI_MATKEY_COLOR_AMBIENT, color);
-		material.ambient = vec3(color.r, color.g, color.b);
-
-		mat->Get(AI_MATKEY_COLOR_DIFFUSE, color);
-		material.diffuse = vec3(color.r, color.g, color.b);
-
-		mat->Get(AI_MATKEY_COLOR_SPECULAR, color);
-		material.specular = vec3(color.r, color.g, color.b);
-
-		float shininess;
-		mat->Get(AI_MATKEY_SHININESS, shininess);
-		material.shininess = shininess / 4; // for some reason this has to be divided by 4
-		std::cout << name.C_Str() << " has shininess " << material.shininess << std::endl;
-
-		aiString texPath;
-		if (mat->GetTexture(aiTextureType_DIFFUSE, 0, &texPath) == aiReturn_SUCCESS)
-		{
-			std::cout << name.C_Str() << " has diffuse: " << texPath.C_Str() << std::endl;
-			material.hasDiffuseTexture = true;
-			loadTexture(material.diffuseTexture, texPath.C_Str());
-		}
-		if (mat->GetTexture(aiTextureType_HEIGHT, 0, &texPath) == aiReturn_SUCCESS) // why is the normal map in aiTextureType_HEIGHT???
-		{
-			std::cout << name.C_Str() << " has normal: " << texPath.C_Str() << std::endl;
-			material.hasNormalTexture = true;
-			loadTexture(material.normalTexture, texPath.C_Str());
-		}
+		material material = loadMaterial(aiScene->mMaterials[aiMesh->mMaterialIndex]);
 
 		// vertices
 		if (material.hasNormalTexture)
@@ -271,6 +291,80 @@ static bool loadMesh(opengl_mesh& mesh, const std::string& filename)
 	uploadVertexData(mesh, vertices, indices);
 
 	return true;
+}
+
+// returns start and end index of loaded meshes and materials
+static std::pair<uint32, uint32> loadMesh(std::vector<opengl_mesh>& meshes, std::vector<material>& materials, const std::string& filename)
+{
+	std::string filepath = std::string("res/models/") + filename;
+
+	Assimp::Importer Importer;
+	const aiScene* aiScene = Importer.ReadFile(filepath, aiProcess_Triangulate | aiProcess_GenSmoothNormals
+		| aiProcess_FlipUVs | aiProcess_JoinIdenticalVertices | aiProcess_ImproveCacheLocality);
+
+	if (!aiScene) {
+		std::cerr << "File " << filepath << " not found." << std::endl;
+		return std::pair<uint32, uint32>(0, 0);
+	}
+
+	uint32 startIndex = (uint32)meshes.size();
+
+	uint32 numberOfMeshes = aiScene->mNumMeshes;
+
+	assert(numberOfMeshes > 0);
+
+	for (uint32 m = 0; m < numberOfMeshes; ++m)
+	{
+		const aiMesh* aiMesh = aiScene->mMeshes[m];
+
+		std::vector<vertex3PTN> vertices; // this does not support normal mapping for now
+		std::vector<uint32> indices;
+
+		material material = loadMaterial(aiScene->mMaterials[aiMesh->mMaterialIndex]);
+		opengl_mesh mesh = { 0 };
+
+		vertices.reserve(aiMesh->mNumVertices);
+		indices.reserve(aiMesh->mNumFaces * 3);
+
+		uint32 vertexCount = aiMesh->mNumVertices;
+		uint32 indexCount = aiMesh->mNumFaces * 3;
+
+		mesh.indexCount = indexCount;
+
+
+		for (uint32 i = 0; i < aiMesh->mNumVertices; ++i) {
+
+			const aiVector3D& pos = aiMesh->mVertices[i];
+			const aiVector3D& nor = aiMesh->mNormals[i];
+			const aiVector3D& tex = aiMesh->mTextureCoords[0][i];
+
+			vertex3PTN vertex;
+			vertex.pos = vec3(pos.x, pos.y, pos.z);
+			vertex.nor = vec3(nor.x, nor.y, nor.z);
+			vertex.tex = vec2(0, 0);
+			if (aiMesh->HasTextureCoords(0))
+				vertex.tex = vec2(aiMesh->mTextureCoords[0][i].x, aiMesh->mTextureCoords[0][i].y);
+
+			vertices.push_back(vertex);
+		}
+
+		for (uint32 i = 0; i < aiMesh->mNumFaces; i++) {
+			const aiFace &face = aiMesh->mFaces[i];
+			assert(face.mNumIndices == 3);
+			indices.push_back(face.mIndices[0]);
+			indices.push_back(face.mIndices[1]);
+			indices.push_back(face.mIndices[2]);
+		}
+
+		uploadVertexData(mesh, vertices, indices);
+
+		meshes.push_back(mesh);
+		materials.push_back(material);
+	}
+
+	uint32 endIndex = (uint32)meshes.size();
+
+	return std::pair<uint32, uint32>(startIndex, endIndex);
 }
 
 static void deleteMesh(opengl_mesh& mesh)
@@ -632,7 +726,7 @@ static bool initializeFBOs(opengl_renderer& renderer)
 	attachColorAttachment(renderer.frontFaceBuffer, GL_RGB32F, GL_FLOAT);		// positions
 	attachColorAttachment(renderer.frontFaceBuffer, GL_RGB16F, GL_FLOAT);		// normals
 	attachColorAttachment(renderer.frontFaceBuffer, GL_RGB8, GL_UNSIGNED_BYTE);	// color
-	attachColorAttachment(renderer.frontFaceBuffer, GL_R16F, GL_FLOAT);			// shininess
+	attachColorAttachment(renderer.frontFaceBuffer, GL_R8, GL_UNSIGNED_BYTE);	// shininess
 	attachDepthAttachment(renderer.frontFaceBuffer);
 	bool frontFaceBufferSucess = finishFBO(renderer.frontFaceBuffer);
 
@@ -721,8 +815,10 @@ static bool loadAllShaders(opengl_renderer& renderer)
 			renderer.geometry_diffuse = glGetUniformLocation(shader.programID, "diffuse");
 			renderer.geometry_specular = glGetUniformLocation(shader.programID, "specular");
 			renderer.geometry_shininess = glGetUniformLocation(shader.programID, "shininess");
+			renderer.geometry_emitting = glGetUniformLocation(shader.programID, "emitting");
 			renderer.geometry_hasDiffuseTexture = glGetUniformLocation(shader.programID, "hasDiffuseTexture");
 			renderer.geometry_hasNormalTexture = glGetUniformLocation(shader.programID, "hasNormalTexture");
+			renderer.geometry_hasSpecularTexture = glGetUniformLocation(shader.programID, "hasSpecularTexture");
 			renderer.geometry_numberOfPointLights = glGetUniformLocation(shader.programID, "numberOfPointLights");
 
 			for (uint32 i = 0; i < MAX_POINT_LIGHTS; ++i)
@@ -735,6 +831,7 @@ static bool loadAllShaders(opengl_renderer& renderer)
 
 			glUniform1i(glGetUniformLocation(shader.programID, "diffuseTexture"), 0);
 			glUniform1i(glGetUniformLocation(shader.programID, "normalTexture"), 1);
+			glUniform1i(glGetUniformLocation(shader.programID, "specularTexture"), 2);			
 
 			reloaded = true;
 		}
@@ -824,14 +921,23 @@ void initializeScene(scene_state& scene, scene_name name, uint32 screenWidth, ui
 	{
 		loadStaticGeometry(scene.staticGeometry, scene.staticGeometryMaterials, "street/street.obj");
 
-		// TODO: right light positions
-		float lightHeight = 7.5f;
-		float radius = 15.f;
-		float lightDistance = 9.1f;
-		for (uint32 i = 0; i < 10; ++i)
-		{
-			scene.pointLights.push_back(point_light(vec3(-41.f + i * lightDistance, lightHeight, 0.f), radius, vec3(1.f, 1.f, 1.f)));
-		}
+		std::pair<uint32, uint32> lampIndices = loadMesh(scene.geometry, scene.materials, "street/lamp.obj");
+		float lightHeight = 5.f;
+		float radius = 30.f;
+		vec3 color(1.f, 0.83f, 0.66f);
+
+		scene.entities.push_back(entity(lampIndices.first, lampIndices.second, SQT(vec3(0.f, 0.f, 5.f), quat(), 0.3f)));
+		scene.pointLights.push_back(point_light(vec3(0.f, lightHeight, 5.f), radius, color));
+
+		scene.entities.push_back(entity(lampIndices.first, lampIndices.second, SQT(vec3(-10.f, 0.f, 5.f), quat(), 0.3f)));
+		scene.pointLights.push_back(point_light(vec3(-10.f, lightHeight, 5.f), radius, color));
+
+		scene.entities.push_back(entity(lampIndices.first, lampIndices.second, SQT(vec3(-20.f, 0.f, 5.f), quat(), 0.3f)));
+		scene.pointLights.push_back(point_light(vec3(-20.f, lightHeight, 5.f), radius, color));
+
+		scene.entities.push_back(entity(lampIndices.first, lampIndices.second, SQT(vec3(-30.f, 0.f, 2.f), quat(), 0.3f)));
+		scene.pointLights.push_back(point_light(vec3(-30.f, lightHeight, 2.f), radius, color));
+
 	}
 
 	// camera
@@ -877,7 +983,7 @@ void updateScene(scene_state& scene, raw_input& input, float dt)
 	scene.cam.position += (rotation * positionChange) * movementSpeed * dt;
 
 	scene.cam.view = createViewMatrix(scene.cam.position, scene.cam.pitch, scene.cam.yaw);
-	scene.cam.toPrevFramePos = scene.cam.proj * prevView * inverted(scene.cam.view); // I think this only works with static geometry!
+	scene.cam.toPrevFramePos = scene.cam.proj * prevView * inverted(scene.cam.view); // I think this only works with non-moving geometry!
 }
 
 static void renderGeometry(opengl_renderer& renderer, scene_state& scene)
@@ -893,11 +999,12 @@ static void renderGeometry(opengl_renderer& renderer, scene_state& scene)
 		glUniform1f(renderer.geometry_pl_radius[i], scene.pointLights[i].radius);
 		glUniform3f(renderer.geometry_pl_color[i], scene.pointLights[i].color.x, scene.pointLights[i].color.y, scene.pointLights[i].color.z);
 	}
+
+	mat4 MV = scene.cam.view;
+	mat4 MVP = scene.cam.proj * MV;
+
 	for (uint32 i = 0; i < scene.staticGeometry.size(); ++i)
 	{
-		mat4 MV = scene.cam.view;
-		mat4 MVP = scene.cam.proj * MV;
-
 		glUniformMatrix4fv(renderer.geometry_MV, 1, GL_FALSE, MV.data);
 		glUniformMatrix4fv(renderer.geometry_MVP, 1, GL_FALSE, MVP.data);
 
@@ -931,22 +1038,95 @@ static void renderGeometry(opengl_renderer& renderer, scene_state& scene)
 			glUniform1i(renderer.geometry_hasNormalTexture, 0);
 		}
 
+		if (scene.staticGeometryMaterials[i].hasSpecularTexture)
+		{
+			glUniform1i(renderer.geometry_hasSpecularTexture, 1);
+
+			glActiveTexture(GL_TEXTURE2);
+			glBindTexture(GL_TEXTURE_2D, scene.staticGeometryMaterials[i].specularTexture.textureID);
+		}
+		else
+		{
+			glUniform1i(renderer.geometry_hasSpecularTexture, 0);
+		}
+
+		glUniform1i(renderer.geometry_emitting, scene.staticGeometryMaterials[i].emitting ? 1 : 0);
+
 		bindAndDrawMesh(scene.staticGeometry[i]);
 	}
 
-	/*if (renderSphere)
+	for (uint32 i = 0; i < scene.entities.size(); ++i)
 	{
-		opengl_shader& geometryShader = renderer.shaders[SHADER_GEOMETRY];
-		bindShader(geometryShader);
+		entity& ent = scene.entities[i];
+		mat4 MV = scene.cam.view * sqtToMat4(ent.position);
+		mat4 MVP = scene.cam.proj * MV;
 
-		vec3 pos(-20, 2, 0);
-		mat4 MV = scene.cam.view * createModelMatrix(pos, quat(), 2.f);
+		glUniformMatrix4fv(renderer.geometry_MV, 1, GL_FALSE, MV.data);
+		glUniformMatrix4fv(renderer.geometry_MVP, 1, GL_FALSE, MVP.data);
+
+		for (uint32 m = ent.meshStartIndex; m < ent.meshEndIndex; ++m)
+		{
+
+			// material properties
+			glUniform3f(renderer.geometry_ambient, scene.materials[m].ambient.x, scene.materials[m].ambient.y, scene.materials[m].ambient.z);
+			glUniform3f(renderer.geometry_diffuse, scene.materials[m].diffuse.x, scene.materials[m].diffuse.y, scene.materials[m].diffuse.z);
+			glUniform3f(renderer.geometry_specular, scene.materials[m].specular.x, scene.materials[m].specular.y, scene.materials[m].specular.z);
+			glUniform1f(renderer.geometry_shininess, scene.materials[m].shininess);
+
+			if (scene.materials[m].hasDiffuseTexture)
+			{
+				glUniform1i(renderer.geometry_hasDiffuseTexture, 1);
+
+				glActiveTexture(GL_TEXTURE0);
+				glBindTexture(GL_TEXTURE_2D, scene.materials[m].diffuseTexture.textureID);
+			}
+			else
+			{
+				glUniform1i(renderer.geometry_hasDiffuseTexture, 0);
+			}
+
+			if (scene.materials[m].hasNormalTexture)
+			{
+				glUniform1i(renderer.geometry_hasNormalTexture, 1);
+
+				glActiveTexture(GL_TEXTURE1);
+				glBindTexture(GL_TEXTURE_2D, scene.materials[m].normalTexture.textureID);
+			}
+			else
+			{
+				glUniform1i(renderer.geometry_hasNormalTexture, 0);
+			}
+
+			if (scene.materials[m].hasSpecularTexture)
+			{
+				glUniform1i(renderer.geometry_hasSpecularTexture, 1);
+
+				glActiveTexture(GL_TEXTURE2);
+				glBindTexture(GL_TEXTURE_2D, scene.materials[m].specularTexture.textureID);
+			}
+			else
+			{
+				glUniform1i(renderer.geometry_hasSpecularTexture, 0);
+			}
+
+			glUniform1i(renderer.geometry_emitting, scene.materials[m].emitting ? 1 : 0);
+
+			bindAndDrawMesh(scene.geometry[m]);
+		}
+	}
+
+#if 0
+	for (point_light& pl : scene.pointLights)
+	{
+		vec3 pos = pl.position;
+		mat4 MV = scene.cam.view * createModelMatrix(pos, quat(), 1.f);
 		mat4 MVP = scene.cam.proj * MV;
 		glUniformMatrix4fv(renderer.geometry_MV, 1, GL_FALSE, MV.data);
 		glUniformMatrix4fv(renderer.geometry_MVP, 1, GL_FALSE, MVP.data);
 
 		bindAndDrawMesh(renderer.sphere);
-	}*/
+	}
+#endif
 }
 
 void renderScene(opengl_renderer& renderer, scene_state& scene, uint32 screenWidth, uint32 screenHeight, bool debugRendering)

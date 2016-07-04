@@ -56,12 +56,16 @@ uniform vec3 ambient;
 uniform vec3 diffuse;
 uniform vec3 specular;
 uniform float shininess;
+uniform int emitting;
 
 uniform int hasDiffuseTexture;
 uniform sampler2D diffuseTexture;
 
 uniform int hasNormalTexture;
 uniform sampler2D normalTexture;
+
+uniform int hasSpecularTexture;
+uniform sampler2D specularTexture;
 
 struct point_light
 {
@@ -104,28 +108,38 @@ void main()
 	if (hasDiffuseTexture == 1)
 		diffuseTexColor *= texture2D(diffuseTexture, texCoords).rgb;
 		
-	vec3 E = normalize(-position);
-	for (int i = 0; i < min(MAX_POINT_LIGHTS, numberOfPointLights); ++i)
+	if (emitting == 1)
 	{
-		vec3 L = pointLights[i].position - position;
-		float dist = length(L);
-		L /= dist;
+		diffuseColor = diffuseTexColor; // hack for street lantern
+	}
+	else
+	{
+		vec3 E = normalize(-position);
+		for (int i = 0; i < min(MAX_POINT_LIGHTS, numberOfPointLights); ++i)
+		{
+			vec3 L = pointLights[i].position - position;
+			float dist = length(L);
+			L /= dist;
 
-		float diffuseFactor = clamp(dot(L, N), 0.0, 1.0);
+			float diffuseFactor = clamp(dot(L, N), 0.0, 1.0);
 
-		float normDist = clamp(dist / pointLights[i].radius, 0.0, 1.0);
-		float attenuation = 1.0 - normDist * normDist;
+			float normDist = clamp(dist / pointLights[i].radius, 0.0, 1.0);
+			float attenuation = 1.0 - normDist * normDist;
 
-		vec3 R = normalize(reflect(-L, N));
-		float specularFactor = pow(clamp(dot(E, R), 0.f, 1.f), shininess);
+			vec3 R = normalize(reflect(-L, N));
+			float specularFactor = pow(clamp(dot(E, R), 0.f, 1.f), shininess);
 
-		ambientColor += ambient * pointLights[i].color * attenuation;
-		diffuseColor += diffuseFactor * pointLights[i].color * diffuseTexColor * attenuation;
-		specularColor += specularFactor * pointLights[i].color * attenuation;
+			ambientColor += ambient * pointLights[i].color * attenuation;
+			diffuseColor += diffuseFactor * pointLights[i].color * diffuseTexColor * attenuation;
+
+			specularColor += specularFactor * pointLights[i].color * attenuation;
+		}
 	}
 	
 	out_position.xyz = position;
 	out_normal.xyz = N;
 	out_color = diffuseColor + ambientColor + specularColor;
-	out_shininess = shininess;
+	//out_color = diffuseColor;
+
+	out_shininess = (hasSpecularTexture == 1) ? texture2D(specularTexture, texCoords).x : 0.8; // what should be default?
 }

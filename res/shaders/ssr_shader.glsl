@@ -55,10 +55,13 @@ float linear01(float depthValue, float n, float f)
 	return (2.0 * n) / (f + n - depthValue * (f - n));
 }
 
-bool rayIntersectsDepthBuffer(float zA, float zB, vec2 uv, float nearPlane, float farPlane)
+bool rayIntersectsDepthBuffer(float zA, float zB, vec2 uv, float nearPlane, float farPlane, vec3 rayOrigin, bool awayFromCam)
 {
 	float depthFrontFace = linear01(texture2D(depthTexture, uv).x, nearPlane, farPlane) * -farPlane;
 	float depthBackFace = texture2D(backfaceDepthTexture, uv).x * -farPlane; // why not linearize?
+
+	if (awayFromCam && depthFrontFace > rayOrigin.z)
+		return false; // if ray faces away from camera, ignore everything closer than ray origin
 
 	return zB <= depthFrontFace && zA >= depthBackFace;
 }
@@ -86,6 +89,8 @@ bool traceScreenSpaceRay(vec3 rayOrigin, vec3 rayDirection, float maxRayDistance
 			: maxRayDistance;
 
 	vec3 rayEnd = rayOrigin + rayDirection * rayLength;
+
+	bool awayFromCam = rayEnd.z < rayOrigin.z;
 
 	// project into homogeneous clip space
 	vec4 H0 = proj * vec4(rayOrigin, 1.0);
@@ -159,7 +164,7 @@ bool traceScreenSpaceRay(vec3 rayOrigin, vec3 rayDirection, float maxRayDistance
 		hitPixel = permute ? pqk.yx : pqk.xy; // hitPixel = P
 		hitPixel *= invScreenDim;
 
-		intersect = rayIntersectsDepthBuffer(zA, zB, hitPixel, nearPlane, farPlane);
+		intersect = rayIntersectsDepthBuffer(zA, zB, hitPixel, nearPlane, farPlane, rayOrigin, awayFromCam);
 	}
 
 	// binary search refinement
@@ -189,7 +194,7 @@ bool traceScreenSpaceRay(vec3 rayOrigin, vec3 rayDirection, float maxRayDistance
 			hitPixel *= invScreenDim;
 				        
 			originalStride *= 0.5;
-			stride = rayIntersectsDepthBuffer( zA, zB, hitPixel, nearPlane, farPlane) ? -originalStride : originalStride;
+			stride = rayIntersectsDepthBuffer(zA, zB, hitPixel, nearPlane, farPlane, rayOrigin, awayFromCam) ? -originalStride : originalStride;
 		}
 	}
 
@@ -202,9 +207,9 @@ bool traceScreenSpaceRay(vec3 rayOrigin, vec3 rayDirection, float maxRayDistance
 }
 
 float calculateAlphaForIntersection(float iterationCount, float specularStrength, vec2 hitPixel, vec3 hitPoint, vec3 rayOrigin, vec3 rayDirection, float iterations,
-	float screenEdgeFadeStart, float eyeFadeStart, float eyeFadeEnd, float maxRayDistance)
+	float screenEdgeFadeStart, float eyeFadeStart, float eyeFadeEnd, float maxRayDistance, vec3 normal)
 {
-	float alpha = min( 1.0, specularStrength * 1.0);
+	float alpha = min(1.0, specularStrength);
 				
 	// Fade ray hits that approach the maximum iterations
 	alpha *= 1.0 - (iterationCount / iterations);
@@ -226,6 +231,10 @@ float calculateAlphaForIntersection(float iterationCount, float specularStrength
 				
 	// Fade ray hits based on distance from ray origin
 	alpha *= 1.0 - clamp( distance( rayOrigin, hitPoint) / maxRayDistance, 0.0, 1.0);
+
+	// fresnel
+	float fresnel = 1.0 - clamp(dot(normal, rayDirection), 0.0, 1.0);
+	alpha *= fresnel;
 				
 	return alpha;
 }
@@ -237,18 +246,19 @@ void main()
 	vec3 normal = normalize(texture2D(normalTexture, texCoords).xyz);
 	float shininess = texture2D(shininessTexture, texCoords).x;
 	
-	gl_FragDepth = texture2D(depthTexture, texCoords).x;
+	//gl_FragDepth = texture2D(depthTexture, texCoords).x;
 	out_reflectedColor = vec4(0.0, 0.0, 0.0, 0.0);
 	
+#if 1
 	vec3 viewDir = normalize(position);
 	vec3 rayDirection = normalize(reflect(viewDir, normal));
 	vec3 rayOrigin = position;
 
 	// parameters for ray tracing
 	float maxRayTraceDistance = 100;
-	float stride = 10;
+	float stride = 15;
 	float strideZCutoff = 1000;
-	float iterations = 50;
+	float iterations = 70;
 	float binarySearchIterations = 10;
 
 	vec2 uv2 = texCoords * screenDim;
@@ -267,13 +277,13 @@ void main()
 
 	if (result)
 	{
-		float specularStrength = 0.8; // TODO: parameter
+		float specularStrength = texture2D(shininessTexture, texCoords).x;
 		float screenEdgeFadeStart = 0.75;
 		float eyeFadeStart = -10;
 		float eyeFadeEnd = 10;
 
 		float alpha = calculateAlphaForIntersection(iterationsNeeded, specularStrength, hitPixel, hitPoint, rayOrigin, rayDirection, iterations,
-			screenEdgeFadeStart, eyeFadeStart, eyeFadeEnd, maxRayTraceDistance);
+			screenEdgeFadeStart, eyeFadeStart, eyeFadeEnd, maxRayTraceDistance, normal);
 
 		vec4 prevFramePos = toPrevFramePos * vec4(hitPoint, 1.0);
 		prevFramePos.xyz = prevFramePos.xyz / prevFramePos.w;
@@ -282,6 +292,7 @@ void main()
 
 		out_reflectedColor = vec4(texture2D(lastFrameColorTexture, tex).rgb, alpha);
 	}
+#endif
 }
 
 

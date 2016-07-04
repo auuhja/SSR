@@ -93,12 +93,25 @@ struct material
 
 	bool hasDiffuseTexture;
 	bool hasNormalTexture;
+	bool hasSpecularTexture;
+	bool emitting;
 
 	opengl_texture diffuseTexture;
 	opengl_texture normalTexture;
+	opengl_texture specularTexture;
 };
 
 #define MAX_POINT_LIGHTS 11
+
+struct entity
+{
+	uint32 meshStartIndex;
+	uint32 meshEndIndex;
+	SQT position;
+
+	entity(uint32 startIndex, uint32 endIndex, const SQT& position)
+		: meshStartIndex(startIndex), meshEndIndex(endIndex), position(position) {}
+};
 
 struct scene_state
 {
@@ -106,6 +119,10 @@ struct scene_state
 
 	std::vector<opengl_mesh> staticGeometry;
 	std::vector<material> staticGeometryMaterials;
+
+	std::vector<opengl_mesh> geometry;
+	std::vector<material> materials;
+	std::vector<entity> entities;
 
 	std::vector<point_light> pointLights;
 };
@@ -125,8 +142,8 @@ struct opengl_renderer
 	opengl_shader shaders[SHADER_COUNT];
 
 	// shader uniforms
-	GLuint geometry_MVP, geometry_MV, geometry_ambient, geometry_diffuse, geometry_specular, geometry_shininess;
-	GLuint geometry_hasDiffuseTexture, geometry_hasNormalTexture;
+	GLuint geometry_MVP, geometry_MV, geometry_ambient, geometry_diffuse, geometry_specular, geometry_shininess, geometry_emitting;
+	GLuint geometry_hasDiffuseTexture, geometry_hasNormalTexture, geometry_hasSpecularTexture;
 
 	GLuint geometry_numberOfPointLights, geometry_pl_position[MAX_POINT_LIGHTS], geometry_pl_color[MAX_POINT_LIGHTS], geometry_pl_radius[MAX_POINT_LIGHTS];
 
