@@ -742,9 +742,13 @@ static bool initializeFBOs(opengl_renderer& renderer)
 	attachColorAttachment(renderer.lastFrameBuffer, GL_RGBA8, GL_UNSIGNED_BYTE);
 	bool lastFrameBufferSuccess = finishFBO(renderer.lastFrameBuffer);
 
+	createFBO(renderer.tmpBuffer, renderer.width, renderer.height);
+	attachColorAttachment(renderer.tmpBuffer, GL_RGBA, GL_UNSIGNED_BYTE);
+	bool tmpBufferSuccess = finishFBO(renderer.tmpBuffer);
+
 	bindDefaultFramebuffer(renderer.width, renderer.height);
 
-	return frontFaceBufferSucess && backFaceBufferSuccess && reflectionBufferSuccess && lastFrameBufferSuccess;
+	return frontFaceBufferSucess && backFaceBufferSuccess && reflectionBufferSuccess && lastFrameBufferSuccess && tmpBufferSuccess;
 }
 
 static void blitFrameBuffer(opengl_fbo& from, uint32 fromIndex, opengl_fbo& to, uint32 toIndex)
@@ -852,6 +856,19 @@ static bool loadAllShaders(opengl_renderer& renderer)
 			glUniform1i(glGetUniformLocation(shader.programID, "shininessTexture"), 3);
 			glUniform1i(glGetUniformLocation(shader.programID, "depthTexture"), 4);
 			glUniform1i(glGetUniformLocation(shader.programID, "backfaceDepthTexture"), 5);
+
+			reloaded = true;
+		}
+	}
+	{
+		opengl_shader& shader = renderer.shaders[SHADER_BLUR];
+		if (loadShader(shader, "blur_shader.glsl"))
+		{
+			bindShader(shader);
+
+			renderer.blur_blurDirection = glGetUniformLocation(shader.programID, "blurDirection");
+
+			glUniform1i(glGetUniformLocation(shader.programID, "inputTexture"), 0);
 
 			reloaded = true;
 		}
@@ -1196,6 +1213,37 @@ void renderScene(opengl_renderer& renderer, scene_state& scene, uint32 screenWid
 
 	bindAndDrawMesh(renderer.plane);
 
+	if (debugRendering)
+	{
+		//bindDefaultFramebuffer(screenWidth, screenHeight);
+		//glClear(GL_COLOR_BUFFER_BIT);
+		blitFrameBufferToScreen(renderer.frontFaceBuffer, 2, 0, screenHeight / 2, screenWidth / 2, screenHeight);			 // top left: image without reflections
+		blitFrameBufferToScreen(renderer.reflectionBuffer, 0, screenWidth / 2, screenHeight / 2, screenWidth, screenHeight); // top right: reflection buffer
+		blitFrameBufferToScreen(renderer.frontFaceBuffer, 3, 0, 0, screenWidth / 2, screenHeight / 2);						 // bottom left: shininess
+	}
+
+	// blur reflection buffer
+	bindFramebuffer(renderer.tmpBuffer);
+	glClear(GL_COLOR_BUFFER_BIT);
+
+	opengl_shader& blurShader = renderer.shaders[SHADER_BLUR];
+	bindShader(blurShader);
+
+	glUniform2f(renderer.blur_blurDirection, 1, 0);
+
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, renderer.reflectionBuffer.colorTextures[0]);
+
+	bindAndDrawMesh(renderer.plane);
+
+	bindFramebuffer(renderer.reflectionBuffer);
+	glClear(GL_COLOR_BUFFER_BIT);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, renderer.tmpBuffer.colorTextures[0]);
+
+	glUniform2f(renderer.blur_blurDirection, 0, 1);
+	bindAndDrawMesh(renderer.plane);
+
 	// bring it together - save for next frame
 	bindFramebuffer(renderer.lastFrameBuffer);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -1212,11 +1260,7 @@ void renderScene(opengl_renderer& renderer, scene_state& scene, uint32 screenWid
 	// blit to screen
 	if (debugRendering)
 	{
-		//bindDefaultFramebuffer(screenWidth, screenHeight);
-		//glClear(GL_COLOR_BUFFER_BIT);
-		blitFrameBufferToScreen(renderer.frontFaceBuffer, 2, 0, screenHeight / 2, screenWidth / 2, screenHeight);			 // top left: image without reflections
-		blitFrameBufferToScreen(renderer.reflectionBuffer, 0, screenWidth / 2, screenHeight / 2, screenWidth, screenHeight); // top right: reflection buffer
-		blitFrameBufferToScreen(renderer.frontFaceBuffer, 3, 0, 0, screenWidth / 2, screenHeight / 2);						 // bottom left: shininess
+		blitFrameBufferToScreen(renderer.reflectionBuffer, 0, screenWidth / 2, 0, screenWidth, screenHeight / 2);
 	}
 	else
 	{

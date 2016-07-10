@@ -46,5 +46,8 @@
     <None Include="res\shaders\result_shader.glsl">
       <Filter>shaders</Filter>
     </None>
+    <None Include="res\shaders\blur_shader.glsl">
+      <Filter>shaders</Filter>
+    </None>
   </ItemGroup>
 </Project>

@@ -79,6 +79,7 @@ enum shader_type
 {
 	SHADER_GEOMETRY,
 	SHADER_SSR,
+	SHADER_BLUR,
 	SHADER_RESULT,
 
 	SHADER_COUNT,
@@ -135,6 +136,7 @@ struct opengl_renderer
 	opengl_fbo backFaceBuffer;		// backface depth
 	opengl_fbo lastFrameBuffer;		// color info of prev frame
 	opengl_fbo reflectionBuffer;	// reflection color, reflection mask
+	opengl_fbo tmpBuffer;			// used for blurring
 
 	opengl_mesh plane;
 	opengl_mesh sphere;
@@ -148,6 +150,8 @@ struct opengl_renderer
 	GLuint geometry_numberOfPointLights, geometry_pl_position[MAX_POINT_LIGHTS], geometry_pl_color[MAX_POINT_LIGHTS], geometry_pl_radius[MAX_POINT_LIGHTS];
 
 	GLuint ssr_screenDim, ssr_proj, ssr_toPrevFramePos, ssr_clippingPlanes;
+
+	GLuint blur_blurDirection;
 };
 
 enum kb_button
