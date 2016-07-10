@@ -940,7 +940,10 @@ void initializeScene(scene_state& scene, scene_name name, uint32 screenWidth, ui
 		std::pair<uint32, uint32> lampIndices = loadMesh(scene.geometry, scene.materials, "street/lamp.obj");
 		float lightHeight = 5.f;
 		float radius = 30.f;
-		vec3 color(1.f, 0.83f, 0.66f);
+		vec3 color(0.7f, 0.53f, 0.36f);
+
+		scene.entities.push_back(entity(lampIndices.first, lampIndices.second, SQT(vec3(8.f, 0.f, 1.f), quat(), 0.3f)));
+		scene.pointLights.push_back(point_light(vec3(-8.f, lightHeight, 1.f), radius, color));
 
 		scene.entities.push_back(entity(lampIndices.first, lampIndices.second, SQT(vec3(0.f, 0.f, 5.f), quat(), 0.3f)));
 		scene.pointLights.push_back(point_light(vec3(0.f, lightHeight, 5.f), radius, color));
@@ -953,6 +956,13 @@ void initializeScene(scene_state& scene, scene_name name, uint32 screenWidth, ui
 
 		scene.entities.push_back(entity(lampIndices.first, lampIndices.second, SQT(vec3(-30.f, 0.f, 2.f), quat(), 0.3f)));
 		scene.pointLights.push_back(point_light(vec3(-30.f, lightHeight, 2.f), radius, color));
+
+		scene.entities.push_back(entity(lampIndices.first, lampIndices.second, SQT(vec3(-40.f, 0.f, -1.f), quat(), 0.3f)));
+		scene.pointLights.push_back(point_light(vec3(-40.f, lightHeight, -1.f), radius, color));
+
+
+		std::pair<uint32, uint32> wallLampIndices = loadMesh(scene.geometry, scene.materials, "street/wall_lamp.obj");
+		scene.entities.push_back(entity(wallLampIndices.first, wallLampIndices.second, SQT(vec3(-28.5f, 6.f, 17.6f), quat(vec3(0.f, 1.f, 0.f), degreesToRadians(180.f)), 5.f)));
 
 	}
 
@@ -1000,6 +1010,8 @@ void updateScene(scene_state& scene, raw_input& input, float dt)
 
 	scene.cam.view = createViewMatrix(scene.cam.position, scene.cam.pitch, scene.cam.yaw);
 	scene.cam.toPrevFramePos = scene.cam.proj * prevView * inverted(scene.cam.view); // I think this only works with non-moving geometry!
+
+	//std::cout << scene.cam.position << std::endl;
 }
 
 static void renderGeometry(opengl_renderer& renderer, scene_state& scene)
@@ -1149,6 +1161,7 @@ void renderScene(opengl_renderer& renderer, scene_state& scene, uint32 screenWid
 {
 	loadAllShaders(renderer);
 
+	// adapt screen on resize
 	if (screenWidth != renderer.width || screenHeight != renderer.height)
 	{
 		renderer.width = screenWidth;
@@ -1157,6 +1170,7 @@ void renderScene(opengl_renderer& renderer, scene_state& scene, uint32 screenWid
 		deleteFBO(renderer.backFaceBuffer);
 		deleteFBO(renderer.lastFrameBuffer);
 		deleteFBO(renderer.reflectionBuffer);
+		deleteFBO(renderer.tmpBuffer);
 		initializeFBOs(renderer);
 	}
 
@@ -1220,23 +1234,16 @@ void renderScene(opengl_renderer& renderer, scene_state& scene, uint32 screenWid
 	// blur reflection buffer
 	bindFramebuffer(renderer.tmpBuffer);
 	glClear(GL_COLOR_BUFFER_BIT);
-
 	opengl_shader& blurShader = renderer.shaders[SHADER_BLUR];
-
 	bindShader(blurShader);
-
 	glUniform2f(renderer.blur_blurDirection, 1, 0);
-
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, renderer.reflectionBuffer.colorTextures[0]);
-
 	bindAndDrawMesh(renderer.plane);
-
 	bindFramebuffer(renderer.reflectionBuffer);
 	glClear(GL_COLOR_BUFFER_BIT);
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, renderer.tmpBuffer.colorTextures[0]);
-
 	glUniform2f(renderer.blur_blurDirection, 0, 1);
 	bindAndDrawMesh(renderer.plane);
 
@@ -1273,6 +1280,7 @@ void cleanupRenderer(opengl_renderer& renderer)
 	deleteFBO(renderer.backFaceBuffer);
 	deleteFBO(renderer.lastFrameBuffer);
 	deleteFBO(renderer.reflectionBuffer);
+	deleteFBO(renderer.tmpBuffer);
 }
 
 void cleanupScene(scene_state& scene)
@@ -1280,6 +1288,14 @@ void cleanupScene(scene_state& scene)
 	for (opengl_mesh& mesh : scene.staticGeometry)
 		deleteMesh(mesh);
 	for (material& mat : scene.staticGeometryMaterials)
+	{
+		deleteTexture(mat.diffuseTexture);
+		deleteTexture(mat.normalTexture);
+	}
+
+	for (opengl_mesh& mesh : scene.geometry)
+		deleteMesh(mesh);
+	for (material& mat : scene.materials)
 	{
 		deleteTexture(mat.diffuseTexture);
 		deleteTexture(mat.normalTexture);

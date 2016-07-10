@@ -135,7 +135,7 @@ struct opengl_renderer
 	opengl_fbo frontFaceBuffer;		// positions, normals, colors, depth
 	opengl_fbo backFaceBuffer;		// backface depth
 	opengl_fbo lastFrameBuffer;		// color info of prev frame
-	opengl_fbo reflectionBuffer;	// reflection color, reflection mask
+	opengl_fbo reflectionBuffer;	// reflection color, reflection mask, this will get slightly blurred
 	opengl_fbo tmpBuffer;			// used for blurring
 
 	opengl_mesh plane;
