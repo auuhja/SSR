@@ -149,7 +149,7 @@ struct opengl_renderer
 
 	GLuint geometry_numberOfPointLights, geometry_pl_position[MAX_POINT_LIGHTS], geometry_pl_color[MAX_POINT_LIGHTS], geometry_pl_radius[MAX_POINT_LIGHTS];
 
-	GLuint ssr_screenDim, ssr_proj, ssr_toPrevFramePos, ssr_clippingPlanes;
+	GLuint ssr_proj, ssr_toPrevFramePos, ssr_clippingPlanes;
 
 	GLuint blur_blurDirection;
 };

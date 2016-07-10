@@ -28,8 +28,6 @@ uniform sampler2D shininessTexture;
 uniform sampler2D depthTexture;
 uniform sampler2D backfaceDepthTexture;
 
-uniform vec2 screenDim;
-
 uniform mat4 proj;		// eye space to screen coordinates (NOT NDC)
 uniform mat4 toPrevFramePos; // pixel pos from last frame
 
@@ -142,6 +140,8 @@ bool traceScreenSpaceRay(vec3 rayOrigin, vec3 rayDirection, float maxRayDistance
 	vec4 dPQK = vec4(dP, dQ.z, dk);
 
 	bool intersect = false;
+
+	vec2 screenDim = textureSize(lastFrameColorTexture, 0);
 
 	vec2 invScreenDim = vec2(1.0 / screenDim.x, 1.0 / screenDim.y);
 
@@ -260,6 +260,8 @@ void main()
 	float strideZCutoff = 1000;
 	float iterations = 70;
 	float binarySearchIterations = 10;
+	
+	vec2 screenDim = textureSize(lastFrameColorTexture, 0);
 
 	vec2 uv2 = texCoords * screenDim;
 	float c = (uv2.x + uv2.y) * 0.25;

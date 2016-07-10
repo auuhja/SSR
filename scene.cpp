@@ -734,7 +734,7 @@ static bool initializeFBOs(opengl_renderer& renderer)
 	attachDepthAttachment(renderer.backFaceBuffer);
 	bool backFaceBufferSuccess = finishFBO(renderer.backFaceBuffer);
 
-	createFBO(renderer.reflectionBuffer, renderer.width, renderer.height);
+	createFBO(renderer.reflectionBuffer, renderer.width / 2, renderer.height / 2);
 	attachColorAttachment(renderer.reflectionBuffer, GL_RGBA, GL_UNSIGNED_BYTE);
 	bool reflectionBufferSuccess = finishFBO(renderer.reflectionBuffer);
 
@@ -742,7 +742,7 @@ static bool initializeFBOs(opengl_renderer& renderer)
 	attachColorAttachment(renderer.lastFrameBuffer, GL_RGBA8, GL_UNSIGNED_BYTE);
 	bool lastFrameBufferSuccess = finishFBO(renderer.lastFrameBuffer);
 
-	createFBO(renderer.tmpBuffer, renderer.width, renderer.height);
+	createFBO(renderer.tmpBuffer, renderer.width / 2, renderer.height / 2);
 	attachColorAttachment(renderer.tmpBuffer, GL_RGBA, GL_UNSIGNED_BYTE);
 	bool tmpBufferSuccess = finishFBO(renderer.tmpBuffer);
 
@@ -845,7 +845,6 @@ static bool loadAllShaders(opengl_renderer& renderer)
 		if (loadShader(shader, "ssr_shader.glsl"))
 		{
 			bindShader(shader);
-			renderer.ssr_screenDim = glGetUniformLocation(shader.programID, "screenDim");
 			renderer.ssr_proj = glGetUniformLocation(shader.programID, "proj");
 			renderer.ssr_toPrevFramePos = glGetUniformLocation(shader.programID, "toPrevFramePos");
 			renderer.ssr_clippingPlanes = glGetUniformLocation(shader.programID, "clippingPlanes");
@@ -1202,8 +1201,6 @@ void renderScene(opengl_renderer& renderer, scene_state& scene, uint32 screenWid
 	glActiveTexture(GL_TEXTURE5);
 	glBindTexture(GL_TEXTURE_2D, renderer.backFaceBuffer.depthTexture);			// back face depth
 
-	glUniform2f(renderer.ssr_screenDim, (GLfloat)screenWidth, (GLfloat)screenHeight);
-
 	mat4 proj = createScaleMatrix(vec3((float)screenWidth, (float)screenHeight, 1.f)) * createModelMatrix(vec3(0.5f, 0.5f, 0.f), quat(), vec3(0.5f, 0.5f, 1.f)) * scene.cam.proj;
 
 	glUniformMatrix4fv(renderer.ssr_proj, 1, GL_FALSE, proj.data);
@@ -1215,8 +1212,6 @@ void renderScene(opengl_renderer& renderer, scene_state& scene, uint32 screenWid
 
 	if (debugRendering)
 	{
-		//bindDefaultFramebuffer(screenWidth, screenHeight);
-		//glClear(GL_COLOR_BUFFER_BIT);
 		blitFrameBufferToScreen(renderer.frontFaceBuffer, 2, 0, screenHeight / 2, screenWidth / 2, screenHeight);			 // top left: image without reflections
 		blitFrameBufferToScreen(renderer.reflectionBuffer, 0, screenWidth / 2, screenHeight / 2, screenWidth, screenHeight); // top right: reflection buffer
 		blitFrameBufferToScreen(renderer.frontFaceBuffer, 3, 0, 0, screenWidth / 2, screenHeight / 2);						 // bottom left: shininess
@@ -1227,6 +1222,7 @@ void renderScene(opengl_renderer& renderer, scene_state& scene, uint32 screenWid
 	glClear(GL_COLOR_BUFFER_BIT);
 
 	opengl_shader& blurShader = renderer.shaders[SHADER_BLUR];
+
 	bindShader(blurShader);
 
 	glUniform2f(renderer.blur_blurDirection, 1, 0);
