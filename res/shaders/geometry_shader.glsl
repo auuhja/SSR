@@ -97,7 +97,7 @@ void main()
 			N
 		);
 		
-		N = normalize(TBN * texture2D(normalTexture, texCoords).xyz);
+		N = normalize(TBN * normalize(texture2D(normalTexture, texCoords).xyz * 2.0 - vec3(1.0)));
 	}
 
 	vec3 ambientColor = vec3(0.0);
