@@ -1,11 +1,12 @@
 #include "scene.h"
+#include "renderer.h"
 #include "common.h"
 
 #include <Windows.h>
 #include <Windowsx.h>
 
 #define SCREEN_WIDTH 1280
-#define SCREEN_HEIGHT 800
+#define SCREEN_HEIGHT 800 // window is resizable
 
 static uint32 clientWidth;
 static uint32 clientHeight;

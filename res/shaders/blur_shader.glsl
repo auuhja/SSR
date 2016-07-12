@@ -20,10 +20,11 @@ in vec2 texCoords;
 uniform sampler2D inputTexture;
 uniform vec2 blurDirection; // [1, 0] or [0, 1]
 
-const float gaussWeights[5] = 
+const float gauss5Weights[5] = 
 {
 	0.06136, 0.24477, 0.38774, 0.24477, 0.06136
 };
+
 
 layout (location = 0) out vec4 out_color;
 
@@ -37,7 +38,7 @@ void main()
 
 	for (float i = -2; i <= 2; i += 1.0)
 	{
-		blurred += texture2D(inputTexture, texCoords + i * texelOffset) * gaussWeights[int(i) + 2];
+		blurred += texture2D(inputTexture, texCoords + i * texelOffset) * gauss5Weights[int(i) + 2];
 	}
 
 	out_color = blurred;

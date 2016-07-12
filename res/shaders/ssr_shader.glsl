@@ -233,8 +233,8 @@ float calculateAlphaForIntersection(float iterationCount, float specularStrength
 	alpha *= 1.0 - clamp( distance( rayOrigin, hitPoint) / maxRayDistance, 0.0, 1.0);
 
 	// fresnel
-	float fresnel = 1.0 - clamp(dot(normal, rayDirection), 0.0, 1.0);
-	alpha *= fresnel;
+	//float fresnel = 1.0 - clamp(dot(normal, rayDirection), 0.0, 1.0);
+	//alpha *= fresnel;
 				
 	return alpha;
 }
